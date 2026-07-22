@@ -45,12 +45,25 @@ class ProviderEvent:
 
 @dataclass(frozen=True)
 class ProviderAction:
-    """An outbound action this integration exposes to automation workflows."""
+    """An outbound action this integration exposes to automation workflows.
+
+    An action may also declare a **capability** — a standard kind (``image.generate``,
+    ``image.describe``, …) that lets a capability resolver discover and invoke it uniformly,
+    regardless of provider. Capability actions follow the canonical input/output dict shape for
+    their kind; ``input_schema``/``output_schema`` document those keys.
+    """
 
     key: str
     label: str
     description: str = ""
     input_schema: dict = field(default_factory=dict)
+
+    # --- capability routing (optional) ---
+    capability: str | None = None  # e.g. "image.generate", "image.describe", "image.edit", "image.search", "image.upscale"
+    output_schema: dict = field(default_factory=dict)  # JSON schema for the canonical outputs of this capability
+    priority: int = 0  # higher wins when several providers advertise the same capability
+    cost_hint: str | None = None  # "free" | "cheap" | "paid" | …  (advisory, for selection)
+    requires_approval: bool = False  # generative/irreversible → resolver should gate via approval_mode
 
 
 @dataclass
