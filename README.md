@@ -67,6 +67,10 @@ content = (
 )
 ```
 
+Mark `required=True` only for content an action genuinely reads or writes — everything else is a
+suggestion the workspace can take or leave, and Marvin lists the two separately. "Announce published
+entries" is an editorial decision, not a requirement.
+
 You own the names of *your* content. For anything belonging to the workspace — which of their entry
 types a rule should track — ask through `parameters` instead of guessing a slug.
 

@@ -78,12 +78,22 @@ class ContentBlueprint:
 
     A provider legitimately owns the names of its own content (an Instagram log entry type is
     Instagram's business). Ask for anything belonging to the *workspace* through ``parameters``.
+
+    Mark ``required=True`` sparingly. A provider that declares its preferences as requirements is
+    deciding how someone else's workspace should be run.
     """
 
-    kind: str  # "entry_type" | "collection" | "scheduled_task"
+    kind: str  # "entry_type" | "collection" | "scheduled_task" | "event_subscription"
     slug: str
     name: str
     description: str = ""
+    required: bool = False
+    """True only when the integration genuinely cannot work without it — an entry type an action
+    reads or writes. Defaults to False, so declaring something required is a deliberate claim.
+
+    Everything else is a *suggestion*: a worked example of how this integration could be used, which
+    the workspace may want or not. "Post to Slack when an entry is published" is an editorial
+    decision, not a requirement — Slack works fine without it."""
     category: str | None = None  # defaults to the provider's name, so its content groups together
     requires: tuple[str, ...] = ()  # "entry_type:<slug>" — within this provider's own bundle
     parameters: tuple[dict, ...] = ()
