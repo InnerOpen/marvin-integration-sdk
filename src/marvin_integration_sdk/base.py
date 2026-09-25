@@ -122,6 +122,9 @@ class IntegrationProvider(ABC):
     name: str  # human label, e.g. "Vercel Deploy Hook"
     description: str = ""
     category: str = CATEGORY_DESTINATION
+    icon: str = ""
+    """Optional emoji shown beside this provider in the UI. Marvin renders it as text, so an emoji
+    works and an icon-set name or URL does not. Purely cosmetic — a provider without one is fine."""
     config_schema: dict = {}  # JSON schema for `config`, validated on create/update
     credentials: tuple[CredentialField, ...] = ()
     emits: tuple[ProviderEvent, ...] = ()
@@ -161,6 +164,7 @@ class IntegrationProvider(ABC):
             "name": self.name,
             "description": self.description,
             "category": self.category,
+            "icon": self.icon,
             "config_schema": self.config_schema,
             "credentials": [asdict(c) for c in self.credentials],
             "emits": [asdict(e) for e in self.emits],

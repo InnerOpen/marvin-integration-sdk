@@ -37,6 +37,8 @@ class MyProvider(IntegrationProvider):
         return {"status": r.status_code}
 ```
 
+An optional `icon` (an emoji — Marvin renders it as text) is shown beside your provider in the UI.
+
 ## Declare the content it needs
 
 A provider never touches the database. If your integration needs entry types, collections or
