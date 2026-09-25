@@ -66,6 +66,30 @@ class ProviderAction:
     requires_approval: bool = False  # generative/irreversible → resolver should gate via approval_mode
 
 
+@dataclass(frozen=True)
+class ContentBlueprint:
+    """Workspace content this integration needs, described rather than created.
+
+    A provider may never touch the database, so it *declares* what it requires — the entry types
+    its actions read and write, collections that give that content a home, the scheduled tasks that
+    drive it — and the core offers the list for review. Nothing is created on install: the
+    workspace applies it, and applying creates only what is missing, so a customised copy survives
+    an upgrade of this provider.
+
+    A provider legitimately owns the names of its own content (an Instagram log entry type is
+    Instagram's business). Ask for anything belonging to the *workspace* through ``parameters``.
+    """
+
+    kind: str  # "entry_type" | "collection" | "scheduled_task"
+    slug: str
+    name: str
+    description: str = ""
+    category: str | None = None  # defaults to the provider's name, so its content groups together
+    requires: tuple[str, ...] = ()  # "entry_type:<slug>" — within this provider's own bundle
+    parameters: tuple[dict, ...] = ()
+    payload: dict = field(default_factory=dict)
+
+
 @dataclass
 class PolledEvent:
     """An event a source provider produced. The provider returns these; the core dispatches them."""
@@ -102,6 +126,8 @@ class IntegrationProvider(ABC):
     credentials: tuple[CredentialField, ...] = ()
     emits: tuple[ProviderEvent, ...] = ()
     actions: tuple[ProviderAction, ...] = ()
+    content: tuple[ContentBlueprint, ...] = ()
+    """Workspace content this integration needs. Offered for review on install, never auto-applied."""
 
     # --- lifecycle (override what you support) ---
 
@@ -139,6 +165,7 @@ class IntegrationProvider(ABC):
             "credentials": [asdict(c) for c in self.credentials],
             "emits": [asdict(e) for e in self.emits],
             "actions": [asdict(a) for a in self.actions],
+            "content": [asdict(c) for c in self.content],
         }
 
 

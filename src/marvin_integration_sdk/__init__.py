@@ -12,6 +12,7 @@ from .base import (
     CATEGORY_NOTIFY,
     CATEGORY_SOURCE,
     INTEGRATION_REGISTRY,
+    ContentBlueprint,
     CredentialField,
     IntegrationContext,
     IntegrationProvider,
@@ -31,6 +32,7 @@ __all__ = [
     "CATEGORY_CAPABILITY",
     "CATEGORY_NOTIFY",
     "CredentialField",
+    "ContentBlueprint",
     "ProviderEvent",
     "ProviderAction",
     "PolledEvent",
@@ -44,4 +46,4 @@ __all__ = [
     "Response",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

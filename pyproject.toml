@@ -1,6 +1,6 @@
 [project]
 name = "marvin-integration-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Contract SDK for Marvin integration providers — base classes, registry, and the http helper interface. Zero heavy dependencies."
 readme = "README.md"
 requires-python = ">=3.11"

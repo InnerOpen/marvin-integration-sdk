@@ -3,7 +3,8 @@
 The contract for building [Marvin](https://claude.ai/code) integrations — credentialed connections to
 external services (deploy hooks, RSS, search indexes, notifiers…).
 
-An integration is a **provider**: a manifest (credentials, config schema, actions, emitted events)
+An integration is a **provider**: a manifest (credentials, config schema, actions, emitted events,
+the workspace content it needs)
 plus handlers. Providers are pure with respect to Marvin — they receive `config`, the resolved
 `secret`, a `logger`, and an `http` helper, and they **return** results/events. They never touch the
 database or the event bus; the core owns all persistence and dispatch. That keeps this SDK tiny (zero
@@ -35,6 +36,37 @@ class MyProvider(IntegrationProvider):
                           headers={"Authorization": f"Bearer {ctx.secret}"})
         return {"status": r.status_code}
 ```
+
+## Declare the content it needs
+
+A provider never touches the database. If your integration needs entry types, collections or
+scheduled tasks to work, *declare* them and the core offers the list to the workspace for review —
+nothing is created on install, and applying creates only what is missing, so a workspace that has
+customised its copy keeps it when you ship a new version.
+
+```python
+from marvin_integration_sdk import ContentBlueprint
+
+content = (
+    ContentBlueprint(
+        kind="entry_type",                      # entry_type | collection | scheduled_task
+        slug="thing-log",
+        name="Thing log",
+        description="One row per thing done.",
+        payload={"name": "Thing log", "schema_json": {"fields": [...]}},
+    ),
+    ContentBlueprint(
+        kind="collection",
+        slug="things-sent",
+        name="Things sent",
+        requires=("entry_type:thing-log",),     # within your own bundle; ordered for you on apply
+        payload={"is_smart": True, "smart_rules": {"entry_types": ["thing-log"]}},
+    ),
+)
+```
+
+You own the names of *your* content. For anything belonging to the workspace — which of their entry
+types a rule should track — ask through `parameters` instead of guessing a slug.
 
 ## Ship it
 
