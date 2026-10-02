@@ -83,7 +83,10 @@ class ContentBlueprint:
     deciding how someone else's workspace should be run.
     """
 
-    kind: str  # "entry_type" | "collection" | "scheduled_task" | "event_subscription"
+    kind: str
+    """What it builds: "entry_type" | "entry_fields" (fields added to an existing entry type) |
+    "collection" | "scheduled_task" | "event_subscription" | "incoming_webhook" | "workflow".
+    Webhooks, workflows, tasks and subscriptions are always created switched off."""
     slug: str
     name: str
     description: str = ""
