@@ -145,6 +145,15 @@ class IntegrationProvider(ABC):
     content: tuple[ContentBlueprint, ...] = ()
     """Workspace content this integration needs. Offered for review on install, never auto-applied."""
 
+    signature_schemes: dict[str, dict] = {}
+    """Webhook signature schemes this integration's senders use, by name — offered to every incoming
+    webhook alongside Marvin's core presets (a core name always wins). Each value describes the HMAC
+    construction: ``algorithm`` (sha1|sha256|sha512), ``encoding`` (hex|base64), ``message`` (a template
+    over ``{body}``, ``{url}``, ``{header:Name}``, ``{t}``; must include ``{body}``), ``header``, and
+    optionally ``prefix``, ``multiple``, ``header_format`` (plain|stripe), ``key_format`` (raw|base64),
+    ``timestamp_header``, ``tolerance_seconds``, ``notes``. E.g. Square:
+    ``{"square": {"encoding": "base64", "message": "{url}{body}", "header": "x-square-hmacsha256-signature"}}``."""
+
     # --- lifecycle (override what you support) ---
 
     def check(self, ctx: IntegrationContext) -> tuple[str, str | None]:
@@ -183,6 +192,7 @@ class IntegrationProvider(ABC):
             "emits": [asdict(e) for e in self.emits],
             "actions": [asdict(a) for a in self.actions],
             "content": [asdict(c) for c in self.content],
+            "signature_schemes": dict(self.signature_schemes),
         }
 
 
