@@ -47,3 +47,15 @@ class HttpHelper(Protocol):
         headers: dict[str, str] | None = None,
         timeout: float = 15,
     ) -> Response: ...
+
+    def put(
+        self,
+        url: str,
+        *,
+        json: Any = None,
+        data: bytes | None = None,
+        headers: dict[str, str] | None = None,
+        timeout: float = 15,
+    ) -> Response: ...
+
+    def delete(self, url: str, *, headers: dict[str, str] | None = None, timeout: float = 15) -> Response: ...
