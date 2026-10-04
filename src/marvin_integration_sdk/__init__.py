@@ -25,6 +25,7 @@ from .base import (
 )
 from .errors import ErrorPolicy, Handle, IntegrationError, Retry, policy_info, resolve_policy
 from .http import HttpHelper, Response
+from .logo import LOGO_CONTENT_TYPES, load_logo
 
 __all__ = [
     "CATEGORIES",
@@ -51,6 +52,8 @@ __all__ = [
     "policy_info",
     "HttpHelper",
     "Response",
+    "load_logo",
+    "LOGO_CONTENT_TYPES",
 ]
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

@@ -39,6 +39,70 @@ class MyProvider(IntegrationProvider):
 
 An optional `icon` (an emoji — Marvin renders it as text) is shown beside your provider in the UI.
 
+## Logo
+
+Ship the service's official mark and Marvin shows it in place of the emoji. `logo` is a path relative
+to the package your provider class lives in, `.svg` or `.png`:
+
+```python
+class MyProvider(IntegrationProvider):
+    icon = "🛰️"          # still the fallback
+    logo = "logo.svg"    # src/my_package/logo.svg
+```
+
+`load_logo(provider)` returns `(bytes, content_type)` or `None`, and `info()["has_logo"]` says whether
+the file was found. The file must be **package data** in your wheel. Hatchling (what the existing
+providers use) includes every non-ignored file under the listed package, so this is enough as long as
+the file is committed and not `.gitignore`d:
+
+```toml
+[tool.hatch.build.targets.wheel]
+packages = ["src/my_package"]   # src/my_package/logo.svg ships with it
+```
+
+With setuptools, declare it explicitly:
+
+```toml
+[tool.setuptools.package-data]
+my_package = ["logo.svg"]
+```
+
+Marvin validates the logo before serving it and falls back to `icon` when it refuses one: at most
+64 KB; a PNG must start with the PNG signature; an SVG may not contain a `DOCTYPE`/`ENTITY`, `<script>`,
+`<foreignObject>`, `on*=` event attributes, `href`/`xlink:href` other than `#fragment`, `javascript:`, or
+`url(…)`/`@import` pointing anywhere but `#fragment`. Use a plain, self-contained mark — optimise it
+(e.g. with SVGO) and inline any gradients.
+
+## Options for an action input
+
+An input whose valid values come from the service (a channel, a list, a workflow) can say where to get
+them. Add `x-marvin-options` to the property in `input_schema`, naming a **read** action on the same
+provider:
+
+```python
+ProviderAction(
+    key="post",
+    label="Post message",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "channel": {
+                "type": "string",
+                "x-marvin-options": {"action": "list_channels", "value": "id", "label": "name",
+                                     "args": {"archived": False}},   # args: optional, static
+            },
+        },
+    },
+)
+```
+
+Marvin's step editor and Run action form run `list_channels` through the connection and render a
+searchable picker, keeping free text as the fallback (when the action fails, or for a value not in the
+list). The referenced action returns either a list of objects or an object with an `items` list; each
+object's `value` field becomes the stored value and its `label` field (falling back to the value) what
+people see. Only actions named by some `x-marvin-options` hint can be run this way, at most 500 options
+are shown, and the action must be side-effect free — it runs whenever someone opens the picker.
+
 ## Declare the content it needs
 
 A provider never touches the database. If your integration needs entry types, collections or

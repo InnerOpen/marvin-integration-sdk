@@ -20,6 +20,7 @@ from typing import ClassVar
 
 from .errors import ErrorPolicy, policy_info, validate_policy
 from .http import HttpHelper
+from .logo import load_logo
 
 # Provider categories — drive UI grouping and answer "which way does data flow?".
 CATEGORY_SOURCE = "source"  # pulls external content in (RSS, cloud storage, git)
@@ -158,7 +159,12 @@ class IntegrationProvider(ABC):
     category: str = CATEGORY_DESTINATION
     icon: str = ""
     """Optional emoji shown beside this provider in the UI. Marvin renders it as text, so an emoji
-    works and an icon-set name or URL does not. Purely cosmetic — a provider without one is fine."""
+    works and an icon-set name or URL does not. Purely cosmetic — a provider without one is fine.
+    It stays the fallback wherever a ``logo`` is missing or refused."""
+    logo: ClassVar[str] = ""
+    """Optional official logo: a path relative to this provider class's package (e.g. ``"logo.svg"``),
+    shipped as package data. ``.svg`` or ``.png``. Read with ``load_logo``; Marvin validates it (size,
+    no scripts or external references) and falls back to ``icon`` if it is refused."""
     config_schema: dict = {}  # JSON schema for `config`, validated on create/update
     credentials: tuple[CredentialField, ...] = ()
     emits: tuple[ProviderEvent, ...] = ()
@@ -213,6 +219,7 @@ class IntegrationProvider(ABC):
             "description": self.description,
             "category": self.category,
             "icon": self.icon,
+            "has_logo": load_logo(self) is not None,
             "config_schema": self.config_schema,
             "credentials": [asdict(c) for c in self.credentials],
             "emits": [asdict(e) for e in self.emits],
