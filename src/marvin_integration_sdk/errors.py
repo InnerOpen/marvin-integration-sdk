@@ -139,6 +139,9 @@ class Handle:
             raise TypeError(f"Handle.then must be a Handle or None, got {type(self.then).__name__}")
         if self.then is not None and self.retry is None:
             raise ValueError("Handle.then only applies once retries are exhausted, so it needs a retry")
+        if self.succeed and self.retry is not None:
+            # The pipeline moves on after a success, so a later retry would re-run the steps after it.
+            raise ValueError("Handle.succeed and Handle.retry can't be combined: a success has nothing left to retry")
 
     def to_dict(self) -> dict:
         return {

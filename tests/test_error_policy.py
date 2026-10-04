@@ -202,6 +202,7 @@ def test_a_malformed_policy_is_rejected_at_registration(attrs, message):
         (lambda: Handle(retry=(60, 300)), TypeError),
         (lambda: Handle(review="yes"), TypeError),
         (lambda: Handle(then=REVIEW), ValueError),  # nothing to exhaust
+        (lambda: Handle(succeed=True, retry=Retry(backoff=(1,))), ValueError),  # a retry would re-run later steps
         (lambda: Handle(retyr=Retry(backoff=(1,))), TypeError),  # unknown key
         (lambda: Retry(backoff=()), ValueError),
         (lambda: Retry(backoff=(-1,)), TypeError),
