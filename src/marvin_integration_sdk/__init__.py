@@ -23,6 +23,7 @@ from .base import (
     list_providers,
     register_provider,
 )
+from .errors import ErrorPolicy, Handle, IntegrationError, Retry, policy_info, resolve_policy
 from .http import HttpHelper, Response
 
 __all__ = [
@@ -42,8 +43,14 @@ __all__ = [
     "register_provider",
     "get_provider",
     "list_providers",
+    "IntegrationError",
+    "Retry",
+    "Handle",
+    "ErrorPolicy",
+    "resolve_policy",
+    "policy_info",
     "HttpHelper",
     "Response",
 ]
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

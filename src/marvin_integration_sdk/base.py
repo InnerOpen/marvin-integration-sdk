@@ -10,10 +10,15 @@ persistence and dispatch. That keeps plugins decoupled from core internals and s
 
 from __future__ import annotations
 
+import hashlib
+import json
+import uuid
 from abc import ABC
 from dataclasses import asdict, dataclass, field
 from logging import Logger
+from typing import ClassVar
 
+from .errors import ErrorPolicy, policy_info, validate_policy
 from .http import HttpHelper
 
 # Provider categories — drive UI grouping and answer "which way does data flow?".
@@ -64,6 +69,8 @@ class ProviderAction:
     priority: int = 0  # higher wins when several providers advertise the same capability
     cost_hint: str | None = None  # "free" | "cheap" | "paid" | …  (advisory, for selection)
     requires_approval: bool = False  # generative/irreversible → resolver should gate via approval_mode
+
+    error_policy: ErrorPolicy = field(default_factory=dict)  # code -> Handle; overrides the provider's policy for this action
 
 
 @dataclass(frozen=True)
@@ -126,6 +133,20 @@ class IntegrationContext:
     secret: str | None
     logger: Logger
     http: HttpHelper
+    resume: dict | None = None
+    """The last ``IntegrationError.partial`` saved for this entry + action, so a retry continues where
+    the failed attempt stopped. None on a first attempt."""
+    idempotency_seed: str | None = None
+    """Stable across one retry chain. Derive idempotency keys from it (see ``idempotency_key``) so a
+    retried request the remote already processed isn't applied twice."""
+
+    def idempotency_key(self, *parts) -> str:
+        """A key that is the same on every attempt of this retry chain for the same ``parts``
+        (e.g. ``ctx.idempotency_key("charge", order_id)``). Random when there is no seed."""
+        if self.idempotency_seed is None:
+            return uuid.uuid4().hex
+        material = json.dumps([self.idempotency_seed, *map(str, parts)])
+        return hashlib.sha256(material.encode()).hexdigest()[:32]
 
 
 class IntegrationProvider(ABC):
@@ -153,6 +174,11 @@ class IntegrationProvider(ABC):
     optionally ``prefix``, ``multiple``, ``header_format`` (plain|stripe), ``key_format`` (raw|base64),
     ``timestamp_header``, ``tolerance_seconds``, ``notes``. E.g. Square:
     ``{"square": {"encoding": "base64", "message": "{url}{body}", "header": "x-square-hmacsha256-signature"}}``."""
+
+    error_policy: ClassVar[ErrorPolicy] = {}
+    """How the core handles an ``IntegrationError`` by its ``code`` — e.g.
+    ``{"rate_limited": Handle(retry=Retry(backoff=(60, 300))), "*": Handle(review=True)}``. An action's
+    own ``error_policy`` takes precedence; see ``resolve_policy`` for the lookup order."""
 
     # --- lifecycle (override what you support) ---
 
@@ -190,9 +216,10 @@ class IntegrationProvider(ABC):
             "config_schema": self.config_schema,
             "credentials": [asdict(c) for c in self.credentials],
             "emits": [asdict(e) for e in self.emits],
-            "actions": [asdict(a) for a in self.actions],
+            "actions": [{**asdict(a), "error_policy": {code: h.to_dict() for code, h in a.error_policy.items()}} for a in self.actions],
             "content": [asdict(c) for c in self.content],
             "signature_schemes": dict(self.signature_schemes),
+            "error_policy": policy_info(self),
         }
 
 
@@ -202,7 +229,10 @@ INTEGRATION_REGISTRY: dict[str, IntegrationProvider] = {}
 
 
 def register_provider(cls):
-    """Class decorator that adds the provider to the global registry."""
+    """Class decorator that adds the provider to the global registry. Rejects malformed error policies."""
+    validate_policy(cls.error_policy, f"provider '{cls.slug}'")
+    for action in cls.actions:
+        validate_policy(action.error_policy, f"provider '{cls.slug}' action '{action.key}'")
     INTEGRATION_REGISTRY[cls.slug] = cls()
     return cls
 

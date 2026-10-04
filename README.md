@@ -74,6 +74,40 @@ entries" is an editorial decision, not a requirement.
 You own the names of *your* content. For anything belonging to the workspace — which of their entry
 types a rule should track — ask through `parameters` instead of guessing a slug.
 
+## Error handling
+
+Raise `IntegrationError` with a `code` you choose, and declare how each code is handled. The core
+applies the policy: your action never sleeps, retries or alerts anyone itself.
+
+```python
+from marvin_integration_sdk import Handle, IntegrationError, Retry
+
+class MyProvider(IntegrationProvider):
+    error_policy = {
+        "rate_limited": Handle(retry=Retry(backoff=(120, 600, 3600)), then=Handle(review=True)),
+        "auth_expired": Handle(notify=True, retry=Retry(backoff=(), on_recovery=True)),
+        "*": Handle(review=True),                       # anything without its own entry
+    }
+    actions = (
+        ProviderAction(key="post", label="Post",
+                       error_policy={"duplicate": Handle(succeed=True)}),   # per-action, wins
+    )
+
+    def run_action(self, key, args, ctx):
+        done = (ctx.resume or {}).get("posted", 0)      # a retry continues where it stopped
+        r = ctx.http.post(..., headers={"Idempotency-Key": ctx.idempotency_key("post", args["id"])})
+        if r.status_code == 429:
+            raise IntegrationError("Rate limited", code="rate_limited",
+                                   partial={"posted": done}, retry_after=float(r.headers.get("retry-after", 60)))
+```
+
+Lookup order is `action[code]` › `provider[code]` › `action["*"]` › `provider["*"]`; with no match the
+action fails as usual. `review`, `notify` and `succeed` happen straight away, `retry` schedules more
+attempts (past the end of `backoff` the last delay repeats), and `then` applies once they run out.
+`ctx.idempotency_key(...)` is the same on every attempt of one retry chain, so a request the remote
+already processed isn't applied twice. Malformed policies are rejected at `@register_provider`, and
+Marvin shows each one in plain words (`Handle.describe()`), e.g. "retry 3× (2m, 10m, 1h), then send to review".
+
 ## Ship it
 
 Expose the provider via an entry point so an installed Marvin discovers it automatically:
