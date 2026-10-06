@@ -187,3 +187,53 @@ my_service = "my_package:MyProvider"
 
 Then, on a Marvin host: `uv add my-package` → restart → your integration appears in the catalog.
 No core changes, no frontend changes.
+
+## Storage plugins
+
+The same SDK carries the storage contract (`marvin_integration_sdk.storage`): where Marvin keeps
+uploaded assets, and where its backup engine writes. A storage plugin is installed site-wide by the
+platform operator, like an integration, and offers either or both of:
+
+- an asset **provider** (`StorageProvider`): put/get/delete/exists, `get_public_url`, `get_metadata`,
+  `iter_keys(prefix)` (the backup engine mirrors assets from any provider with it) and an optional
+  `checksum(key, algorithm)`. Selected with `STORAGE_PROVIDER=<slug>`.
+- a backup **target** (`BackupTarget`): `put_file(key, path, metadata)`, `get(key, dest) -> metadata`,
+  `list(prefix) -> {key: TargetObject}`, `delete(keys)` and `head(key)`. A `TargetObject` carries the
+  size and a digest with its `hashlib` algorithm, so unchanged assets aren't copied twice.
+
+Each class declares the environment variables it reads (`Setting`, secrets marked so Marvin masks
+them) and builds itself in `from_config(config)`:
+
+```python
+from marvin_integration_sdk.storage import BackupTarget, Setting, StoragePlugin, StorageProvider
+
+class BucketProvider(StorageProvider):
+    slug = "bucket"
+    settings = (Setting("BUCKET_NAME", required=True), Setting("BUCKET_KEY", secret=True, required=True))
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(config["BUCKET_NAME"], config["BUCKET_KEY"])
+    ...
+
+PLUGIN = StoragePlugin(slug="bucket", name="Bucket storage", provider=BucketProvider, target=BucketTarget)
+```
+
+```toml
+[project.entry-points."marvin.storage_providers"]
+bucket = "my_package:PLUGIN"
+```
+
+Marvin core ships the built-in `local` provider and `local` target; it refuses to start when
+`STORAGE_PROVIDER` names a slug no installed plugin provides. Run the conformance kit against your
+classes (Marvin runs it against its built-ins), and use the in-memory reference implementations in
+`marvin_integration_sdk.storage.memory` as fakes:
+
+```python
+from marvin_integration_sdk.storage.testing import BackupTargetContract, StorageProviderContract
+
+class TestBucketProvider(StorageProviderContract):
+    @pytest.fixture
+    def provider(self, bucket):
+        return BucketProvider(bucket, "key")
+```
