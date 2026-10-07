@@ -237,3 +237,68 @@ class TestBucketProvider(StorageProviderContract):
     def provider(self, bucket):
         return BucketProvider(bucket, "key")
 ```
+
+## AI provider plugins
+
+A model vendor (OpenAI, Anthropic, Ollama…) is a plugin too: `marvin_integration_sdk.ai` carries the
+contract. It is installed site-wide by the platform operator; every workspace can then choose it in its
+AI settings, with the platform's credentials or its own. One package per vendor.
+
+A provider subclasses `AIProvider` and implements `complete`, `complete_structured`, `list_models` and
+`test_connection` (plus `complete_with_tools`, `embed`, `pull_model` when its capability flags say so),
+speaking Marvin's vendor-neutral `Message` / `ToolCall` / `ToolDefinition` / `ImagePart` /
+`CompletionResult`. It declares:
+
+- `credentials`: `Credential`s by key. `api_key` comes from a secret, `base_url` from settings or the
+  workspace's provider row, any other key (Azure's `api_version`) is an option. In platform mode Marvin
+  reads `<SLUG>_<KEY>` (`OPENAI_API_KEY`), and it masks secrets wherever it shows them.
+- capability flags: `supports_vision`, `supports_structured_output`, `supports_embeddings`,
+  `supports_tool_calls`, `supports_model_pull`.
+- `prices` (`ModelPrice` per model id, USD per million tokens) or `self_hosted = True`; a dated
+  snapshot (`gpt-4o-2024-08-06`) takes its base id's price. Prices live with the provider, so a new
+  model's price is a plugin release, not a Marvin one.
+- `default_model`, `suggested_models` (the AI settings' model picker) and `default_embedding_model`.
+
+```python
+from marvin_integration_sdk.ai import API_KEY, BASE_URL, AIProvider, AIProviderPlugin, ModelPrice
+
+class AcmeProvider(AIProvider):
+    provider_type = "acme"
+    display_name = "Acme AI"
+    credentials = (API_KEY, BASE_URL)
+    supports_tool_calls = True
+    prices = {"acme-large": ModelPrice(input_per_1m=2.0, output_per_1m=8.0)}
+    default_model = "acme-large"
+
+    @classmethod
+    def from_credentials(cls, values):
+        return cls(api_key=values["api_key"], base_url=values["base_url"])
+    ...
+
+plugin = AIProviderPlugin(slug="acme", name="Acme AI", provider=AcmeProvider)
+```
+
+```toml
+[project.entry-points."marvin.ai_providers"]
+acme = "acme_marvin:plugin"
+```
+
+A plugin whose slug matches a provider built into Marvin core replaces it (that is how a vendor leaves
+core without a flag day); two plugins can't share a slug. Run the conformance kit over a fake of your
+vendor's server: implement `FakeTransport` (queue neutral replies, translate them to your wire format,
+record the request) and subclass `AIProviderContract`. `marvin_integration_sdk.ai.fake` holds the
+reference `FakeAIProvider` + `ScriptedTransport`, which pass the kit and serve as the fake provider in
+Marvin's own tests.
+
+```python
+from marvin_integration_sdk.ai.testing import AIProviderContract
+
+class TestAcmeProvider(AIProviderContract):
+    @pytest.fixture
+    def transport(self):
+        return AcmeFakeServer()          # a FakeTransport
+
+    @pytest.fixture
+    def provider(self, transport):
+        return AcmeProvider(api_key="test-key", http_client=transport.client())
+```
