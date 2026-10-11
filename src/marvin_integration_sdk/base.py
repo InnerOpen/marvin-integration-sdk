@@ -21,6 +21,7 @@ from typing import ClassVar
 from .errors import ErrorPolicy, policy_info, validate_policy
 from .http import HttpHelper
 from .logo import load_logo
+from .recipes import WorkflowRecipe, load_guide
 
 # Provider categories — drive UI grouping and answer "which way does data flow?".
 CATEGORY_SOURCE = "source"  # pulls external content in (RSS, cloud storage, git)
@@ -171,6 +172,14 @@ class IntegrationProvider(ABC):
     actions: tuple[ProviderAction, ...] = ()
     content: tuple[ContentBlueprint, ...] = ()
     """Workspace content this integration needs. Offered for review on install, never auto-applied."""
+    recipes: tuple[WorkflowRecipe, ...] = ()
+    """Ready-made workflows for this integration, shown in Marvin's Workflow Library (tagged with this plugin) and
+    offered once it is connected. Unlike a ``workflow`` blueprint nothing is created: the person fills one in and
+    saves it. See ``marvin_integration_sdk.recipes``."""
+    guide: ClassVar[str] = ""
+    """Optional how-to: a markdown file in this provider's package (``"guide.md"``, package data), at most
+    ``MAX_GUIDE_BYTES``. Marvin's agents read it when building workflows where this integration is connected, and
+    its manual search finds it. Read with ``load_guide``."""
 
     signature_schemes: dict[str, dict] = {}
     """Webhook signature schemes this integration's senders use, by name — offered to every incoming
@@ -225,6 +234,8 @@ class IntegrationProvider(ABC):
             "emits": [asdict(e) for e in self.emits],
             "actions": [{**asdict(a), "error_policy": {code: h.to_dict() for code, h in a.error_policy.items()}} for a in self.actions],
             "content": [asdict(c) for c in self.content],
+            "recipes": [asdict(r) for r in self.recipes],
+            "has_guide": load_guide(self) is not None,
             "signature_schemes": dict(self.signature_schemes),
             "error_policy": policy_info(self),
         }

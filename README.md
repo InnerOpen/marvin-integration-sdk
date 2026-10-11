@@ -138,6 +138,62 @@ entries" is an editorial decision, not a requirement.
 You own the names of *your* content. For anything belonging to the workspace — which of their entry
 types a rule should track — ask through `parameters` instead of guessing a slug.
 
+## Teach Marvin about it: recipes and a guide (0.9.0)
+
+Two optional declarations make Marvin's agents and its Workflow Library know your integration the way they know
+Marvin's own features.
+
+**Recipes** are ready-made workflows. Marvin lists them in its Workflow Library, tagged "from the <name> plugin
+<version>", and offers each to a workspace once your integration is connected there. Nothing is created: the person
+fills in the setup variables and saves it, switched off.
+
+```python
+from marvin_integration_sdk import WorkflowRecipe
+
+recipes = (
+    WorkflowRecipe(
+        id="announce-entry-type",                         # shown as "<slug>.announce-entry-type"
+        title="Announce published entries",
+        outcome="Each published entry of one type is posted to the channel.",
+        definition={                                      # Marvin's workflow format
+            "trigger": {"type": "event", "event": "entry_published"},
+            "conditions": [{"field": "entry.entry_type", "op": "eq", "value": "{{entry_type}}"}],
+            "actions": [{"kind": "integration", "integration": "{{connection}}", "action": "send_message",
+                         "args": {"text": "New: ${entry.title}"}}],   # ${…} is resolved when it runs
+        },
+        variables={                                       # every {{placeholder}}: type (= picker), description, example
+            "entry_type": {"type": "entry_type_slug", "description": "Which entries to announce.", "example": "post"},
+            "connection": {"type": "integration_slug", "description": "This integration's connection.", "example": "slack"},
+        },
+    ),
+)
+```
+
+`check_recipe` holds a recipe to its shape (kebab-case id, every placeholder declared and every declared one used,
+known variable types, an example for each, integration steps calling only your own actions); Marvin also validates
+the definition, filled with the examples, against its workflow model — a recipe that fails is skipped, never shown.
+
+**A guide** is a markdown file in your package — how to set it up, what to paste where, what it can't do:
+
+```python
+guide = "guide.md"   # package data beside the provider module, like `logo`; at most 16 KB; starts with "# Title"
+```
+
+Marvin's agents read it when building workflows in a workspace where your integration is connected, and its manual
+search (`search_docs`) finds it. Write it for a person; the agents read the same text.
+
+**Conformance kit.** Subclass `IntegrationContract` in your tests to check all of this (and that `info()`
+serialises and keys are unique) without Marvin:
+
+```python
+from marvin_integration_sdk.testing import IntegrationContract
+
+class TestMyContract(IntegrationContract):
+    @pytest.fixture
+    def provider(self):
+        return MyProvider()
+```
+
 ## Error handling
 
 Raise `IntegrationError` with a `code` you choose, and declare how each code is handled. The core

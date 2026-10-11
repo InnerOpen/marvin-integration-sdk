@@ -26,6 +26,7 @@ from .base import (
 from .errors import ErrorPolicy, Handle, IntegrationError, Retry, policy_info, resolve_policy
 from .http import HttpHelper, Response
 from .logo import LOGO_CONTENT_TYPES, load_logo
+from .recipes import MAX_GUIDE_BYTES, VARIABLE_TYPES, WorkflowRecipe, check_recipe, load_guide
 
 __all__ = [
     "CATEGORIES",
@@ -54,6 +55,11 @@ __all__ = [
     "Response",
     "load_logo",
     "LOGO_CONTENT_TYPES",
+    "WorkflowRecipe",
+    "check_recipe",
+    "load_guide",
+    "MAX_GUIDE_BYTES",
+    "VARIABLE_TYPES",
 ]
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
