@@ -37,6 +37,7 @@ __all__ = [
     "TargetObject",
     "masked_config",
     "read_config",
+    "workspace_settings_problems",
 ]
 
 ENTRY_POINT_GROUP = "marvin.storage_providers"
@@ -81,6 +82,22 @@ def read_config(settings: Iterable[Setting], source: Mapping[str, Any]) -> dict[
     return config
 
 
+def workspace_settings_problems(provider_cls: type[StorageProvider]) -> list[str]:
+    """What is wrong with a provider's ``workspace_settings`` declaration (empty list: nothing). Marvin refuses a
+    provider for workspace buckets while this lists anything; the conformance kit asserts it is empty."""
+    declared = {s.env for s in provider_cls.settings}
+    ws = {s.env: s for s in provider_cls.workspace_settings}
+    problems = [f"{env} is not one of the provider's settings" for env in ws if env not in declared]
+    problems += [f"{env} is secret but not required" for env, s in ws.items() if s.secret and not s.required]
+    if ws and not any(s.secret for s in ws.values()):
+        problems.append("no secret setting: a workspace bucket needs its own credentials")
+    for name in ("endpoint_setting", "public_url_setting"):
+        env = getattr(provider_cls, name)
+        if env and ws and env not in ws:
+            problems.append(f"{name} {env} is not one of workspace_settings")
+    return problems
+
+
 def masked_config(settings: Iterable[Setting], config: Mapping[str, Any]) -> dict[str, Any]:
     """``config`` safe to show: a secret that is set reads ``****``."""
     secret = {s.env for s in settings if s.secret}
@@ -117,6 +134,16 @@ class StorageProvider(ABC):
     slug: ClassVar[str] = ""
     """The name the operator selects it by (``STORAGE_PROVIDER``) and asset rows record."""
     settings: ClassVar[tuple[Setting, ...]] = ()
+    workspace_settings: ClassVar[tuple[Setting, ...]] = ()
+    """The settings a workspace supplies to keep its assets in its own bucket ("bring your own storage"); empty
+    means the provider doesn't offer that. Marvin builds the provider from these alone, never from its
+    environment, so every credential must be ``required``: an empty key would otherwise let a client library fall
+    back to the platform's own credentials. Each must also be one of ``settings`` (same ``env`` name)."""
+    endpoint_setting: ClassVar[str | None] = None
+    """The ``env`` name of the setting holding the service's endpoint URL, which Marvin checks against its endpoint
+    policy before connecting on a workspace's behalf. None: the provider has no configurable endpoint."""
+    public_url_setting: ClassVar[str | None] = None
+    """The ``env`` name of the setting holding the public base URL files are served from, if the provider has one."""
 
     @classmethod
     def from_config(cls, config: Mapping[str, Any]) -> StorageProvider:

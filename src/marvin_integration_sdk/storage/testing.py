@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from . import BackupTarget, StorageProvider, TargetObject
+from . import BackupTarget, StorageProvider, TargetObject, workspace_settings_problems
 
 __all__ = ["BackupTargetContract", "StorageProviderContract"]
 
@@ -43,6 +43,11 @@ class StorageProviderContract:
 
     def _put(self, provider: StorageProvider, key: str, data: bytes = PAYLOAD, content_type: str = "text/plain"):
         return provider.put(key, BytesIO(data), content_type)
+
+    def test_workspace_settings_are_sound(self, provider):
+        """A provider offering workspace buckets declares only its own settings, requires every credential and names
+        its endpoint and public URL settings among them (``workspace_settings_problems``)."""
+        assert workspace_settings_problems(type(provider)) == []
 
     def test_round_trip(self, provider):
         meta = self._put(provider, "ws/assets/2026/07/a-photo.txt")

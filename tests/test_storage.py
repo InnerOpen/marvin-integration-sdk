@@ -11,6 +11,7 @@ from marvin_integration_sdk.storage import (
     StorageProvider,
     masked_config,
     read_config,
+    workspace_settings_problems,
 )
 from marvin_integration_sdk.storage.memory import MemoryBackupTarget, MemoryStorageProvider
 from marvin_integration_sdk.storage.testing import BackupTargetContract, StorageProviderContract
@@ -92,3 +93,43 @@ def test_from_config_must_be_implemented():
 
     with pytest.raises(NotImplementedError):
         Bare.from_config({})
+
+
+def _bucket_provider(**overrides):
+    attrs = {
+        "settings": (Setting("B_BUCKET", required=True), Setting("B_KEY", secret=True), Setting("B_ENDPOINT"), Setting("B_PUBLIC")),
+        "workspace_settings": (
+            Setting("B_BUCKET", required=True),
+            Setting("B_KEY", secret=True, required=True),
+            Setting("B_ENDPOINT"),
+            Setting("B_PUBLIC", required=True),
+        ),
+        "endpoint_setting": "B_ENDPOINT",
+        "public_url_setting": "B_PUBLIC",
+        **overrides,
+    }
+    return type("BucketProvider", (MemoryStorageProvider,), attrs)
+
+
+def test_a_sound_workspace_declaration_has_no_problems_and_none_is_fine_too():
+    assert workspace_settings_problems(_bucket_provider()) == []
+    assert workspace_settings_problems(MemoryStorageProvider) == []  # doesn't offer workspace buckets
+
+
+def test_an_optional_workspace_credential_is_a_problem():
+    """An empty key would let the client library fall back to the platform's credentials."""
+    loose = _bucket_provider(
+        endpoint_setting=None, public_url_setting=None, workspace_settings=(Setting("B_BUCKET", required=True), Setting("B_KEY", secret=True))
+    )
+    assert workspace_settings_problems(loose) == ["B_KEY is secret but not required"]
+
+
+def test_workspace_settings_must_be_the_providers_own_and_name_the_endpoint():
+    odd = _bucket_provider(
+        workspace_settings=(Setting("B_BUCKET", required=True), Setting("OTHER"), Setting("B_PUBLIC")),
+    )
+    assert workspace_settings_problems(odd) == [
+        "OTHER is not one of the provider's settings",
+        "no secret setting: a workspace bucket needs its own credentials",
+        "endpoint_setting B_ENDPOINT is not one of workspace_settings",
+    ]

@@ -280,6 +280,14 @@ PLUGIN = StoragePlugin(slug="bucket", name="Bucket storage", provider=BucketProv
 bucket = "my_package:PLUGIN"
 ```
 
+A provider can also hold one workspace's assets in that workspace's own bucket ("bring your own storage",
+0.11.0). It declares `workspace_settings` (the settings a workspace supplies, a subset of `settings` by `env`
+name), `endpoint_setting` (Marvin checks that endpoint against its policy before connecting) and
+`public_url_setting`. Marvin builds the provider from the workspace's values alone, never its environment, so
+every credential in `workspace_settings` must be `required`; `workspace_settings_problems(cls)` lists what is
+wrong with a declaration, and the conformance kit asserts it is empty. Leave `workspace_settings` empty to not
+offer workspace buckets.
+
 Marvin core ships the built-in `local` provider and `local` target; it refuses to start when
 `STORAGE_PROVIDER` names a slug no installed plugin provides. Run the conformance kit against your
 classes (Marvin runs it against its built-ins), and use the in-memory reference implementations in
