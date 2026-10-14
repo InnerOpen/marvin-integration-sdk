@@ -86,6 +86,8 @@ class AIProviderContract:
         for model_id, price in cls.prices.items():
             assert isinstance(price, ModelPrice)
             assert price.input_per_1m >= 0 and price.output_per_1m >= 0
+            for rate in (price.cached_input_per_1m, price.cache_write_per_1m):
+                assert rate is None or rate >= 0
             assert cls.price(model_id) == price
             assert cls.price(f"{model_id}-2099-01-01") is not None
         if cls.self_hosted:
@@ -93,6 +95,9 @@ class AIProviderContract:
         else:
             for model_id, price in cls.prices.items():
                 assert cls.estimate_cost(model_id, 1_000_000, 1_000_000) == round(price.input_per_1m + price.output_per_1m, 8)
+                # A prompt wholly served from the cache costs the cached rate (the input rate when none is declared).
+                cached_rate = price.input_per_1m if price.cached_input_per_1m is None else price.cached_input_per_1m
+                assert cls.estimate_cost(model_id, 1_000_000, 0, cached_prompt_tokens=1_000_000) == round(cached_rate, 8)
             assert cls.estimate_cost("no-such-model-anywhere", 10, 10) is None
 
     # ── completions ──────────────────────────────────────────────────────────

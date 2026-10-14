@@ -312,7 +312,12 @@ speaking Marvin's vendor-neutral `Message` / `ToolCall` / `ToolDefinition` / `Im
   `supports_tool_calls`, `supports_model_pull`.
 - `prices` (`ModelPrice` per model id, USD per million tokens) or `self_hosted = True`; a dated
   snapshot (`gpt-4o-2024-08-06`) takes its base id's price. Prices live with the provider, so a new
-  model's price is a plugin release, not a Marvin one.
+  model's price is a plugin release, not a Marvin one. A `ModelPrice` may also carry
+  `cached_input_per_1m` and `cache_write_per_1m` (prompt-cache rates; an unset one is the input rate),
+  and a `CompletionResult` reports `cached_prompt_tokens` / `cache_write_tokens` — the parts of
+  `prompt_tokens` the provider's prompt cache served or stored — so Marvin prices a cached prompt at
+  what it actually costs. A provider that caches should ask for it (Anthropic's `cache_control`) and
+  report it; one that doesn't leaves both at 0.
 - `default_model`, `suggested_models` (the AI settings' model picker) and `default_embedding_model`.
 
 ```python

@@ -89,6 +89,12 @@ def test_price_for_takes_exact_ids_then_dated_snapshots_only():
     assert price_for(prices, "gpt-4o-mini-2024-07-18") == prices["gpt-4o-mini"]
     assert price_for(prices, "gpt-5.6-luna") is None
     assert ModelPrice(2.0, 8.0).cost(1_000_000, 500_000) == 6.0
+    # Cache rates: cached and written tokens are parts of the prompt; an undeclared rate is the input rate.
+    priced = ModelPrice(2.0, 8.0, cached_input_per_1m=0.2, cache_write_per_1m=2.5)
+    assert priced.cost(1_000_000, 0, cached_prompt_tokens=600_000, cache_write_tokens=400_000) == round(0.4 * 2.0 * 0 + 0.6 * 0.2 + 0.4 * 2.5, 8)
+    assert priced.cost(1_000_000, 0, cached_prompt_tokens=250_000) == round(0.75 * 2.0 + 0.25 * 0.2, 8)
+    assert ModelPrice(2.0, 8.0).cost(1_000_000, 0, cached_prompt_tokens=1_000_000) == 2.0
+    assert priced.cost(100, 0, cached_prompt_tokens=500) == priced.cost(100, 0, cached_prompt_tokens=100)  # never more than the prompt
 
 
 def test_unpriced_and_self_hosted_estimates():

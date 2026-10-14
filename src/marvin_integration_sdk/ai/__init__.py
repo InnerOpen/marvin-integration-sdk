@@ -128,13 +128,25 @@ def masked_credentials(credentials: Iterable[Credential], values: Mapping[str, A
 
 @dataclass(frozen=True)
 class ModelPrice:
-    """USD per million tokens, input (prompt) and output (completion) separately."""
+    """USD per million tokens, input (prompt) and output (completion) separately. ``cached_input_per_1m`` is what a
+    prompt token served from the provider's prompt cache costs and ``cache_write_per_1m`` what writing one into it
+    costs (Anthropic bills writes at a premium; OpenAI and Google don't); None for either means the input rate, so an
+    unknown cache price never underestimates."""
 
     input_per_1m: float
     output_per_1m: float
+    cached_input_per_1m: float | None = None
+    cache_write_per_1m: float | None = None
 
-    def cost(self, prompt_tokens: int, completion_tokens: int) -> float:
-        return round((prompt_tokens / 1_000_000) * self.input_per_1m + (completion_tokens / 1_000_000) * self.output_per_1m, 8)
+    def cost(self, prompt_tokens: int, completion_tokens: int, cached_prompt_tokens: int = 0, cache_write_tokens: int = 0) -> float:
+        """``cached_prompt_tokens`` and ``cache_write_tokens`` are parts of ``prompt_tokens`` (never more than it)."""
+        cached = min(max(cached_prompt_tokens, 0), prompt_tokens)
+        written = min(max(cache_write_tokens, 0), prompt_tokens - cached)
+        plain = prompt_tokens - cached - written
+        cached_rate = self.input_per_1m if self.cached_input_per_1m is None else self.cached_input_per_1m
+        write_rate = self.input_per_1m if self.cache_write_per_1m is None else self.cache_write_per_1m
+        per_1m = plain * self.input_per_1m + cached * cached_rate + written * write_rate + completion_tokens * self.output_per_1m
+        return round(per_1m / 1_000_000, 8)
 
 
 def price_for(prices: Mapping[str, ModelPrice], model_id: str) -> ModelPrice | None:
@@ -265,6 +277,10 @@ class CompletionResult:
     total_tokens: int
     model: str
     raw: dict = field(default_factory=dict)
+    # Parts of prompt_tokens the provider served from its prompt cache / wrote into it (0 when it has no cache or
+    # didn't say). prompt_tokens stays the whole prompt, so a caller that ignores these is merely pessimistic.
+    cached_prompt_tokens: int = 0
+    cache_write_tokens: int = 0
     # Populated by complete_with_tools when the model asks to call tools instead of answering:
     tool_calls: list[ToolCall] = field(default_factory=list)
     stop_reason: str | None = None
@@ -316,13 +332,16 @@ class AIProvider(ABC):
         return price_for(cls.prices, model_id)
 
     @classmethod
-    def estimate_cost(cls, model_id: str, prompt_tokens: int, completion_tokens: int) -> float | None:
+    def estimate_cost(
+        cls, model_id: str, prompt_tokens: int, completion_tokens: int, cached_prompt_tokens: int = 0, cache_write_tokens: int = 0
+    ) -> float | None:
         """Estimated USD for a run; 0.0 when self-hosted; None when the model has no price (shown as
-        "—", never as a misleading "Free")."""
+        "—", never as a misleading "Free"). The cached and written counts are the parts of the prompt the
+        provider's cache served or stored (CompletionResult), priced at the model's cache rates."""
         if cls.self_hosted:
             return 0.0
         price = cls.price(model_id)
-        return price.cost(prompt_tokens, completion_tokens) if price else None
+        return price.cost(prompt_tokens, completion_tokens, cached_prompt_tokens, cache_write_tokens) if price else None
 
     def embed(self, texts: list[str], model: str) -> list[list[float]]:
         """One embedding vector per input text. Providers with embeddings override."""
