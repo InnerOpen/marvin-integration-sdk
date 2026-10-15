@@ -133,3 +133,16 @@ def test_workspace_settings_must_be_the_providers_own_and_name_the_endpoint():
         "no secret setting: a workspace bucket needs its own credentials",
         "endpoint_setting B_ENDPOINT is not one of workspace_settings",
     ]
+
+
+def test_a_backup_target_can_declare_workspace_settings_too():
+    loose = type(
+        "LooseTarget",
+        (MemoryBackupTarget,),
+        {
+            "settings": (Setting("T_BUCKET", required=True), Setting("T_KEY", secret=True)),
+            "workspace_settings": (Setting("T_BUCKET", required=True), Setting("T_KEY", secret=True)),
+        },
+    )
+    assert workspace_settings_problems(loose) == ["T_KEY is secret but not required"]
+    assert workspace_settings_problems(MemoryBackupTarget) == []

@@ -286,7 +286,8 @@ name), `endpoint_setting` (Marvin checks that endpoint against its policy before
 `public_url_setting`. Marvin builds the provider from the workspace's values alone, never its environment, so
 every credential in `workspace_settings` must be `required`; `workspace_settings_problems(cls)` lists what is
 wrong with a declaration, and the conformance kit asserts it is empty. Leave `workspace_settings` empty to not
-offer workspace buckets.
+offer workspace buckets. A `BackupTarget` can declare `workspace_settings` and
+`endpoint_setting` the same way (0.12.0), for a workspace's own private backup bucket.
 
 Marvin core ships the built-in `local` provider and `local` target; it refuses to start when
 `STORAGE_PROVIDER` names a slug no installed plugin provides. Run the conformance kit against your

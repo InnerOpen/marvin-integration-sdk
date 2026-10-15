@@ -124,6 +124,10 @@ class BackupTargetContract:
         if obj.algorithm:
             assert obj.digest == hashlib.new(obj.algorithm, data).hexdigest()
 
+    def test_workspace_settings_are_sound(self, target):
+        """A target offering workspace backup buckets declares only its own settings and requires every credential."""
+        assert workspace_settings_problems(type(target)) == []
+
     def test_round_trip_keeps_metadata(self, target, source, tmp_path):
         target.put_file("config/marvin-config-20260101T000000Z.tar.gz", source, {"sha256": "abc", "db-sha256": "def"}, "application/gzip")
         dest = tmp_path / "out.bin"

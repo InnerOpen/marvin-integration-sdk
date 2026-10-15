@@ -82,9 +82,9 @@ def read_config(settings: Iterable[Setting], source: Mapping[str, Any]) -> dict[
     return config
 
 
-def workspace_settings_problems(provider_cls: type[StorageProvider]) -> list[str]:
-    """What is wrong with a provider's ``workspace_settings`` declaration (empty list: nothing). Marvin refuses a
-    provider for workspace buckets while this lists anything; the conformance kit asserts it is empty."""
+def workspace_settings_problems(provider_cls: type[StorageProvider] | type[BackupTarget]) -> list[str]:
+    """What is wrong with a provider's (or backup target's) ``workspace_settings`` declaration (empty list: nothing).
+    Marvin refuses it for workspace buckets while this lists anything; the conformance kit asserts it is empty."""
     declared = {s.env for s in provider_cls.settings}
     ws = {s.env: s for s in provider_cls.workspace_settings}
     problems = [f"{env} is not one of the provider's settings" for env in ws if env not in declared]
@@ -92,7 +92,7 @@ def workspace_settings_problems(provider_cls: type[StorageProvider]) -> list[str
     if ws and not any(s.secret for s in ws.values()):
         problems.append("no secret setting: a workspace bucket needs its own credentials")
     for name in ("endpoint_setting", "public_url_setting"):
-        env = getattr(provider_cls, name)
+        env = getattr(provider_cls, name, None)
         if env and ws and env not in ws:
             problems.append(f"{name} {env} is not one of workspace_settings")
     return problems
@@ -212,6 +212,12 @@ class BackupTarget(ABC):
 
     slug: ClassVar[str] = ""
     settings: ClassVar[tuple[Setting, ...]] = ()
+    workspace_settings: ClassVar[tuple[Setting, ...]] = ()
+    """The settings a workspace supplies to keep its own backups in its own (private) bucket; empty means the target
+    doesn't offer that. As for ``StorageProvider.workspace_settings``: built from these alone, never Marvin's
+    environment, so every credential must be ``required``."""
+    endpoint_setting: ClassVar[str | None] = None
+    """The ``env`` name of the endpoint URL setting, checked against Marvin's endpoint policy. None: no endpoint."""
 
     @classmethod
     def from_config(cls, config: Mapping[str, Any]) -> BackupTarget:
