@@ -50,6 +50,10 @@ class MyProvider(IntegrationProvider):
     logo = "logo.svg"    # src/my_package/logo.svg
 ```
 
+An AI provider (`marvin.ai_providers`) declares one the same way, on its `AIProvider` class, beside its
+`provider_type`; Marvin shows it in AI settings and Admin → Plugins. A package with two providers ships one file
+each (`logo = "openai.svg"`, `logo = "azure.svg"`).
+
 `load_logo(provider)` returns `(bytes, content_type)` or `None`, and `info()["has_logo"]` says whether
 the file was found. The file must be **package data** in your wheel. Hatchling (what the existing
 providers use) includes every non-ignored file under the listed package, so this is enough as long as
