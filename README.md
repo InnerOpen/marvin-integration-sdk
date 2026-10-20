@@ -231,6 +231,26 @@ The recipe or blueprint that receives the reply therefore stays free of your ser
 checked when the provider registers (a status that is not one of Marvin's three is refused), and the conformance
 kit asserts the declaration is clean.
 
+### Sometimes a hand-off, sometimes not: `record_if` (0.14.0)
+
+An action that only *sometimes* starts work elsewhere (a newsletter email that is sent, or only saved as a draft) names an
+output key that says so. Marvin records the hand-off only when that key is truthy in the action's result:
+
+```python
+ProviderAction(
+    key="create_issue_email",
+    label="Create issue email",
+    output_schema={"type": "object", "properties": {"email_id": {"type": "string"}, "sent": {"type": "boolean"}}},
+    hands_off=HandsOff(remote_id="email_id", record_if="sent"),  # a draft returns sent=False: nothing is recorded
+)
+```
+
+`record_if` is empty by default (every successful call is a hand-off). The key must be a property of the action's
+`output_schema`, which therefore has to declare it (checked at registration and by the conformance kit, so a typo cannot
+silently record nothing). A call that fails has no result to read, so it records nothing either: its failure reaches people
+through the error policy, as for any action. Marvin also records a hands-off action it runs itself, outside a workflow step
+(a site rebuild's deploy action, wired to an event), the same way; there is no step to declare anything in.
+
 ## Error handling
 
 Raise `IntegrationError` with a `code` you choose, and declare how each code is handled. The core

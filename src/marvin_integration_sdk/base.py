@@ -80,6 +80,11 @@ class HandsOff:
     statuses: dict[str, str] = field(default_factory=dict)
     """The service's words for how a run is going, to Marvin's: ``{"success": "succeeded", "error": "failed",
     "waiting": "in_flight"}``. Marvin's three (``in_flight``, ``succeeded``, ``failed``) need no entry."""
+    record_if: str = ""
+    """The key in the action's result that must be truthy for the hand-off to be recorded (0.14.0). For an action that
+    sometimes hands work off and sometimes doesn't (a newsletter email that is sent, or only saved as a draft): it
+    returns ``sent: True`` only when it started the work. Empty = every successful call is a hand-off. A call that
+    fails has no result to read, so it records nothing either: its failure reaches people through the error policy."""
 
 
 def hands_off_problems(action: ProviderAction) -> list[str]:
@@ -99,12 +104,18 @@ def hands_off_problems(action: ProviderAction) -> list[str]:
     for label, key, schema in (
         ("remote_id", h.remote_id, action.output_schema),
         ("remote_url", h.remote_url, action.output_schema),
+        ("record_if", h.record_if, action.output_schema),
         ("target", h.target, action.input_schema),
     ):
         properties = schema.get("properties") if isinstance(schema, dict) else None
         if key and properties and key not in properties:
             where = "input_schema" if label == "target" else "output_schema"
             problems.append(f"action '{action.key}': hands_off.{label} {key!r} is not a property of its {where}")
+    # A record_if with no declared output keys to read it from can never be checked — and a typo would silently record nothing.
+    if h.record_if:
+        properties = action.output_schema.get("properties") if isinstance(action.output_schema, dict) else None
+        if not properties:
+            problems.append(f"action '{action.key}': hands_off.record_if {h.record_if!r} needs the action's output_schema to declare it")
     return problems
 
 
@@ -131,7 +142,7 @@ class ProviderAction:
     requires_approval: bool = False  # generative/irreversible → resolver should gate via approval_mode
 
     error_policy: ErrorPolicy = field(default_factory=dict)  # code -> Handle; overrides the provider's policy for this action
-    hands_off: HandsOff | None = None  # set when the action starts work elsewhere that reports back later (0.13.0)
+    hands_off: HandsOff | None = None  # set when the action starts work elsewhere that reports back later (0.13.0; record_if 0.14.0)
 
 
 @dataclass(frozen=True)
