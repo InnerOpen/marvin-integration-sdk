@@ -198,6 +198,39 @@ class TestMyContract(IntegrationContract):
         return MyProvider()
 ```
 
+## Hand-offs: follow the work you start (0.13.0)
+
+An action that only *starts* work somewhere else (an n8n workflow, a build, a render) can declare `hands_off`.
+Marvin then keeps one record of each hand-off, with its status, the link to the run and what came back, under
+Settings > Automation > Results, and flags the ones that failed or never replied. The workflow author adds no step
+for it: Marvin records the hand-off **in flight** when the step succeeds and **failed** when the call itself fails.
+
+```python
+from marvin_integration_sdk import HandsOff, ProviderAction
+
+ProviderAction(
+    key="trigger_workflow",
+    label="Trigger workflow",
+    input_schema={"type": "object", "properties": {"path": {"type": "string"}, "entry_id": {"type": "string"}}},
+    output_schema={"type": "object", "properties": {"execution_id": {"type": "string"}, "execution_url": {"type": "string"}}},
+    hands_off=HandsOff(
+        remote_id="execution_id",    # key in the action's result: the run's id over there
+        remote_url="execution_url",  # key in the action's result: a link to the run
+        target="path",               # key in the action's args: what was asked (shown on the record)
+        statuses={"success": "succeeded", "error": "failed", "waiting": "in_flight"},
+    ),
+)
+```
+
+All four fields are optional. The service reports back (a webhook it calls, a poll you add) and a workflow settles
+the record with the core `automation_result` step, passing the connection and the status in **your service's words**.
+Marvin turns them into its own three (`in_flight`, `succeeded`, `failed`) by calling `provider.result_status(word)`,
+which by default reads `HandsOff.statuses` and accepts Marvin's three as they are; override it for words that need
+more than a lookup. A word it does not know leaves the record in flight with the word in its message, so a person can read it.
+The recipe or blueprint that receives the reply therefore stays free of your service's vocabulary. `hands_off` is
+checked when the provider registers (a status that is not one of Marvin's three is refused), and the conformance
+kit asserts the declaration is clean.
+
 ## Error handling
 
 Raise `IntegrationError` with a `code` you choose, and declare how each code is handled. The core

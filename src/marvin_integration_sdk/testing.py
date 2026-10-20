@@ -21,6 +21,7 @@ import json
 
 import pytest
 
+from .base import hands_off_problems
 from .recipes import MAX_GUIDE_BYTES, check_recipe, load_guide
 
 __all__ = ["IntegrationContract"]
@@ -55,6 +56,10 @@ class IntegrationContract:
     def test_recipes_are_well_formed(self, provider):
         problems = {r.id: check_recipe(r, provider) for r in provider.recipes}
         assert not any(problems.values()), {rid: p for rid, p in problems.items() if p}
+
+    def test_hands_off_is_well_formed(self, provider):
+        problems = [p for a in provider.actions for p in hands_off_problems(a)]
+        assert not problems, problems
 
     def test_guide_loads(self, provider):
         if not getattr(provider, "guide", ""):

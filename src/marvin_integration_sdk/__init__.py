@@ -12,14 +12,20 @@ from .base import (
     CATEGORY_NOTIFY,
     CATEGORY_SOURCE,
     INTEGRATION_REGISTRY,
+    RESULT_FAILED,
+    RESULT_IN_FLIGHT,
+    RESULT_STATUSES,
+    RESULT_SUCCEEDED,
     ContentBlueprint,
     CredentialField,
+    HandsOff,
     IntegrationContext,
     IntegrationProvider,
     PolledEvent,
     ProviderAction,
     ProviderEvent,
     get_provider,
+    hands_off_problems,
     list_providers,
     register_provider,
 )
@@ -38,6 +44,12 @@ __all__ = [
     "ContentBlueprint",
     "ProviderEvent",
     "ProviderAction",
+    "HandsOff",
+    "hands_off_problems",
+    "RESULT_IN_FLIGHT",
+    "RESULT_SUCCEEDED",
+    "RESULT_FAILED",
+    "RESULT_STATUSES",
     "PolledEvent",
     "IntegrationContext",
     "IntegrationProvider",
@@ -62,4 +74,4 @@ __all__ = [
     "VARIABLE_TYPES",
 ]
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"

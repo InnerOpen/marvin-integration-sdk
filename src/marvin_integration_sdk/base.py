@@ -50,6 +50,64 @@ class ProviderEvent:
     description: str = ""
 
 
+# How a hand-off ends, in Marvin's words. A provider maps whatever its service says onto these (see ``HandsOff``).
+RESULT_IN_FLIGHT = "in_flight"  # sent, and the other side hasn't finished (or hasn't said so yet)
+RESULT_SUCCEEDED = "succeeded"
+RESULT_FAILED = "failed"
+RESULT_STATUSES = (RESULT_IN_FLIGHT, RESULT_SUCCEEDED, RESULT_FAILED)
+
+
+@dataclass(frozen=True)
+class HandsOff:
+    """Declares that an action hands work to another system, so Marvin can follow it up.
+
+    The action returns once the work is *started*; whether it worked is only known later, when the other
+    side reports back. A hands-off action tells the core where to find the run in its result, and the core
+    keeps one record of the hand-off (its status, the link to the run, the message) that people see under
+    Settings > Automation > Results. Nothing for the workflow author to remember: Marvin records it in
+    flight when the step succeeds and as failed when the call itself fails. The reply is reported with the
+    ``automation_result`` workflow step, which names the connection and the status in the provider's words.
+    """
+
+    remote_id: str = ""
+    """The key in the action's result that holds the run's id on the other side (``execution_id``). Marvin
+    settles the record by it when the reply names it. Leave empty when the service gives no id."""
+    remote_url: str = ""
+    """The key in the action's result that holds a link to the run (``execution_url``), shown as "Open the run"."""
+    target: str = ""
+    """The key in the action's *args* that names what was asked of the other side (an n8n workflow's path), shown
+    as the record's target. Leave empty when the action has one fixed target."""
+    statuses: dict[str, str] = field(default_factory=dict)
+    """The service's words for how a run is going, to Marvin's: ``{"success": "succeeded", "error": "failed",
+    "waiting": "in_flight"}``. Marvin's three (``in_flight``, ``succeeded``, ``failed``) need no entry."""
+
+
+def hands_off_problems(action: ProviderAction) -> list[str]:
+    """What is wrong with an action's ``hands_off`` declaration (empty when it is fine or absent)."""
+    h = action.hands_off
+    if h is None:
+        return []
+    if not isinstance(h, HandsOff):
+        return [f"action '{action.key}': hands_off must be a HandsOff"]
+    problems = []
+    for word, status in h.statuses.items():
+        if not isinstance(word, str) or not word.strip():
+            problems.append(f"action '{action.key}': a status word must be a non-empty string, got {word!r}")
+        if status not in RESULT_STATUSES:
+            problems.append(f"action '{action.key}': status {word!r} maps to {status!r}, which is not one of {', '.join(RESULT_STATUSES)}")
+    # The keys can only be checked against a schema the action actually declares.
+    for label, key, schema in (
+        ("remote_id", h.remote_id, action.output_schema),
+        ("remote_url", h.remote_url, action.output_schema),
+        ("target", h.target, action.input_schema),
+    ):
+        properties = schema.get("properties") if isinstance(schema, dict) else None
+        if key and properties and key not in properties:
+            where = "input_schema" if label == "target" else "output_schema"
+            problems.append(f"action '{action.key}': hands_off.{label} {key!r} is not a property of its {where}")
+    return problems
+
+
 @dataclass(frozen=True)
 class ProviderAction:
     """An outbound action this integration exposes to automation workflows.
@@ -73,6 +131,7 @@ class ProviderAction:
     requires_approval: bool = False  # generative/irreversible → resolver should gate via approval_mode
 
     error_policy: ErrorPolicy = field(default_factory=dict)  # code -> Handle; overrides the provider's policy for this action
+    hands_off: HandsOff | None = None  # set when the action starts work elsewhere that reports back later (0.13.0)
 
 
 @dataclass(frozen=True)
@@ -215,6 +274,21 @@ class IntegrationProvider(ABC):
         """For webhook-pushed sources: translate a raw payload into a bus event."""
         return None
 
+    def result_status(self, word: str, action: str | None = None) -> str | None:
+        """Marvin's status (``in_flight``, ``succeeded`` or ``failed``) for a word this service uses for how a
+        hand-off is going, or None when the word is unknown. The default reads ``HandsOff.statuses`` (of the named
+        action, else of every hands-off action) and accepts Marvin's own three; override it for a service whose
+        words need more than a lookup."""
+        key = str(word or "").strip().lower()
+        if key in RESULT_STATUSES:
+            return key
+        for a in self.actions:
+            if a.hands_off and (action is None or a.key == action):
+                for service_word, status in a.hands_off.statuses.items():
+                    if service_word.strip().lower() == key:
+                        return status
+        return None
+
     # --- helpers ---
 
     def get_action(self, key: str) -> ProviderAction | None:
@@ -247,10 +321,12 @@ INTEGRATION_REGISTRY: dict[str, IntegrationProvider] = {}
 
 
 def register_provider(cls):
-    """Class decorator that adds the provider to the global registry. Rejects malformed error policies."""
+    """Class decorator that adds the provider to the global registry. Rejects malformed error policies and hands_off declarations."""
     validate_policy(cls.error_policy, f"provider '{cls.slug}'")
     for action in cls.actions:
         validate_policy(action.error_policy, f"provider '{cls.slug}' action '{action.key}'")
+        if problems := hands_off_problems(action):
+            raise ValueError(f"provider '{cls.slug}': {problems[0]}")
     INTEGRATION_REGISTRY[cls.slug] = cls()
     return cls
 
