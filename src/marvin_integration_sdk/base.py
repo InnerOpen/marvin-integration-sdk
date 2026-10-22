@@ -164,7 +164,8 @@ class ContentBlueprint:
 
     kind: str
     """What it builds: "entry_type" | "entry_fields" (fields added to an existing entry type) |
-    "collection" | "scheduled_task" | "event_subscription" | "incoming_webhook" | "workflow".
+    "collection" | "scheduled_task" | "event_subscription" | "incoming_webhook" | "workflow" | "playbook" (0.15.0: build it
+    with ``playbook_blueprint``; it arrives as a draft for someone to publish).
     Webhooks, workflows, tasks and subscriptions are always created switched off."""
     slug: str
     name: str

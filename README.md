@@ -119,7 +119,7 @@ from marvin_integration_sdk import ContentBlueprint
 
 content = (
     ContentBlueprint(
-        kind="entry_type",                      # entry_type | collection | scheduled_task
+        kind="entry_type",                      # entry_type | collection | scheduled_task | playbook
         slug="thing-log",
         name="Thing log",
         description="One row per thing done.",
@@ -186,8 +186,32 @@ guide = "guide.md"   # package data beside the provider module, like `logo`; at 
 Marvin's agents read it when building workflows in a workspace where your integration is connected, and its manual
 search (`search_docs`) finds it. Write it for a person; the agents read the same text.
 
+**Playbooks (0.15.0).** An integration can ship Playbooks, the written procedures Marvin's agents load: what makes a good
+newsletter issue, how to read a failed build. Put a skill folder in your package data (`SKILL.md` with `name` and
+`description`, plus optional `references/*.md`) and declare it:
+
+```python
+from marvin_integration_sdk import playbook_blueprint
+
+content = (playbook_blueprint(__package__, "playbooks/acme-weekly-report"),)
+```
+
+Marvin lists it on the card under Optional. An admin adds it, and it arrives as a **draft** with the import review for
+someone to read and publish; updates and edit protection work like a workflow's. The rules (`check_playbook` and the
+conformance test check them; Marvin checks again):
+
+- The name starts with your provider's slug and a hyphen (`acme-weekly-report`; underscores in the slug count as hyphens, so
+  `cloudflare_pages` gives `cloudflare-pages-…`). A name already taken in the workspace is refused, never renamed.
+- Text only (`.md .txt .json .csv .yaml`), no `scripts/` or script files, relative paths without `..`. `SKILL.md` at most
+  64 KB; at most 20 other files of 64 KB each, 256 KB in all.
+- `allowed-tools`, if you set it, names Marvin tools (`list_events`), never your integration's actions. It narrows what an
+  agent may use; it can't widen it. An agent reaches your integration through your workflows.
+- Write for any workspace, not yours. If the Playbook drafts text, say the agent writes it itself and saves it with
+  `create_draft` / `update_draft`, not `compose_entry` / `revise_entry`.
+- An older Marvin skips a Playbook declaration with a warning and loads the rest of your content.
+
 **Conformance kit.** Subclass `IntegrationContract` in your tests to check all of this (and that `info()`
-serialises and keys are unique) without Marvin:
+serialises, keys are unique and each Playbook is well formed) without Marvin:
 
 ```python
 from marvin_integration_sdk.testing import IntegrationContract

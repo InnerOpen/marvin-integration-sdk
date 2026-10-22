@@ -11,8 +11,8 @@ method then runs against it:
             return SlackProvider()
 
 The class name doesn't start with ``Test``, so pytest only collects your subclass. It checks what Marvin relies on
-without Marvin: the catalog entry serialises, keys are unique, every recipe passes ``check_recipe``, and a declared
-guide loads. Marvin validates recipe definitions against its workflow model on top of this.
+without Marvin: the catalog entry serialises, keys are unique, every recipe passes ``check_recipe``, every Playbook passes
+``check_playbook``, and a declared guide loads. Marvin validates recipe definitions against its workflow model on top of this.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import json
 import pytest
 
 from .base import hands_off_problems
+from .playbooks import check_playbook
 from .recipes import MAX_GUIDE_BYTES, check_recipe, load_guide
 
 __all__ = ["IntegrationContract"]
@@ -56,6 +57,10 @@ class IntegrationContract:
     def test_recipes_are_well_formed(self, provider):
         problems = {r.id: check_recipe(r, provider) for r in provider.recipes}
         assert not any(problems.values()), {rid: p for rid, p in problems.items() if p}
+
+    def test_playbooks_are_well_formed(self, provider):
+        problems = {c.slug: check_playbook(c, provider) for c in provider.content if c.kind == "playbook"}
+        assert not any(problems.values()), {slug: p for slug, p in problems.items() if p}
 
     def test_hands_off_is_well_formed(self, provider):
         problems = [p for a in provider.actions for p in hands_off_problems(a)]
