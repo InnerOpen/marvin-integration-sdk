@@ -31,6 +31,8 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+from ..base import ContentBlueprint
+
 __all__ = [
     "API_KEY",
     "BASE_URL",
@@ -425,6 +427,9 @@ class AIProviderPlugin:
     name: str
     provider: type[AIProvider]
     description: str = ""
+    playbooks: tuple[ContentBlueprint, ...] = ()
+    """System Playbooks this plugin gives every workspace (0.16.0), read-only and updated with the package: build each with
+    ``playbook_blueprint(__package__, "playbooks/<name>", scope="system")``; names start with the plugin's slug and a hyphen."""
 
     def __post_init__(self) -> None:
         if not _SLUG.match(self.slug or ""):

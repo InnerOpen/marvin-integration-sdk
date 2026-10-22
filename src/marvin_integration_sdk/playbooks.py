@@ -26,6 +26,25 @@ Rules, checked here and again by Marvin (it never trusts this module):
 
 A Playbook that drafts text should tell the agent to write it itself and save it with ``create_draft`` /
 ``update_draft``, not ``compose_entry`` / ``revise_entry`` (those hand the writing to an AI that never loads Playbooks).
+
+**System Playbooks (0.16.0).** Pass ``scope="system"`` and list the blueprint in the provider's ``system_playbooks`` (or a
+storage / AI plugin's ``playbooks``) and Marvin offers it in *every* workspace automatically, read-only, labelled with your
+plugin's name, updated with your release. A workspace can switch it off or copy it to customise; an operator can switch it off
+for the server. Use it for procedures nobody should have to install (how to read a failed Check connection), not for
+suggestions. On top of the rules above (``check_playbook(..., scope="system")`` checks them, ``playbook_warnings`` adds the
+soft ones):
+
+1. A provider's ``guide.md`` stays the reference for building workflows; a skill covers doing a job and points to the guide
+   (``read_doc plugins/<provider>.md``), never restating actions or recipes.
+2. The manual explains what a feature is; a skill is a procedure (steps, checks, a good result) and links the page.
+3. Workflow authoring stays with ``workflow_authoring_guide`` and the Builder: no "how to set up a workflow" skill.
+4. Instructions say who, skills say how. A system skill never sets voice or tone (it says "if this workspace has a voice
+   Playbook in your list, load it") and never says who the agent is.
+5. Manual-only by default (no ``disable-model-invocation`` key means manual-only); ``false`` only for broadly useful ones.
+6. ``allowed-tools`` is rarely right: it is allowed (narrowing is safety) but warned about.
+7. Write it yourself: a drafting skill saves with ``create_draft`` / ``update_draft``. ``compose_entry`` / ``revise_entry`` in
+   ``allowed-tools`` is refused; in the body it is warned about.
+8. Slugs only: a UUID-looking token is refused (ids differ in every workspace).
 """
 
 from __future__ import annotations
@@ -53,6 +72,10 @@ DESCRIPTION_MAX = 1024
 _TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 _REFERENCED = re.compile(r"(?<![\w/.-])((?:references|assets)/[A-Za-z0-9_./-]*[A-Za-z0-9_])")
 _FENCE = re.compile(r"^---[ \t]*$", re.MULTILINE)
+SCOPES = ("workspace", "system")
+_UUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+_AI_WRITERS = ("compose_entry", "revise_entry")
+_NEGATION = re.compile(r"\b(not|never|don'?t|instead|no)\b", re.IGNORECASE)
 
 
 def provider_prefix(slug: str) -> str:
@@ -116,18 +139,21 @@ def _title(body: str, name: str) -> str:
     return name.replace("-", " ").capitalize()
 
 
-def playbook_blueprint(package: str, folder: str, *, title: str | None = None) -> ContentBlueprint:
+def playbook_blueprint(package: str, folder: str, *, title: str | None = None, scope: str = "workspace") -> ContentBlueprint:
     """Read a skill folder from package data into a ``ContentBlueprint(kind="playbook")``.
 
     ``package`` is the plugin's package (``__package__``); ``folder`` is the skill folder inside it
     (``"playbooks/acme-weekly-report"``) with ``SKILL.md`` at its top. The blueprint's ``slug`` is the SKILL.md ``name``,
     its ``description`` the frontmatter description, its ``name`` the ``title`` (default: the body's first ``# `` heading),
     and its ``payload`` is ``{"skill_md": text, "files": {relative path: text}}``: JSON-safe, nothing left to read later.
-    Never required: a workspace chooses whether it wants it.
+    Never required: a workspace chooses whether it wants it. ``scope="system"`` (0.16.0) stamps ``payload["scope"]``: list the
+    blueprint in ``system_playbooks`` / ``playbooks`` and it is offered in every workspace instead (see the module notes).
 
     Raises ``ValueError`` for a folder that can't be shipped (missing SKILL.md, a script, a binary or oversize file, a path
     outside the folder). Run ``check_playbook`` for the rest.
     """
+    if scope not in SCOPES:
+        raise ValueError(f"playbook scope {scope!r} must be one of {', '.join(SCOPES)}")
     path = PurePosixPath(folder)
     if not folder or path.is_absolute() or ".." in path.parts or "\\" in folder:
         raise ValueError(f"playbook folder {folder!r} must be a relative path inside {package}")
@@ -158,7 +184,7 @@ def playbook_blueprint(package: str, folder: str, *, title: str | None = None) -
         name=title or _title(body, name),
         description=front.get("description", ""),
         required=False,
-        payload={"skill_md": skill_md, "files": files},
+        payload={"skill_md": skill_md, "files": files, **({"scope": scope} if scope != "workspace" else {})},
     )
     problems = _payload_problems(blueprint.payload)
     if problems:
@@ -172,6 +198,8 @@ def _shape_problem(payload: Any) -> str | None:
     files = payload.get("files", {})
     if not isinstance(files, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in files.items()):
         return "payload files must map a relative path to its text"
+    if payload.get("scope", "workspace") not in SCOPES:
+        return f"payload scope must be one of {', '.join(SCOPES)}"
     return None
 
 
@@ -201,14 +229,22 @@ def _payload_problems(payload: Any) -> list[str]:
     return problems
 
 
-def check_playbook(blueprint: ContentBlueprint, provider: Any = None) -> list[str]:
-    """What is wrong with a Playbook blueprint: empty when Marvin can take it. With ``provider``, the name must start
-    with the provider's slug and a hyphen."""
+def check_playbook(blueprint: ContentBlueprint, provider: Any = None, *, scope: str = "workspace") -> list[str]:
+    """What is wrong with a Playbook blueprint: empty when Marvin can take it. With ``provider`` (an integration provider or a
+    storage / AI plugin), the name must start with its slug and a hyphen. ``scope`` is where the blueprint is listed:
+    ``"workspace"`` (``content``, the default) or ``"system"`` (``system_playbooks`` / ``playbooks``); a blueprint built for
+    the other one is refused. System Playbooks are also linted (Rules 7 and 8; ``playbook_warnings`` has the soft ones)."""
     if blueprint.kind != "playbook":
         return [f"kind is '{blueprint.kind}', not 'playbook'"]
     if _shape_problem(blueprint.payload):
         return [_shape_problem(blueprint.payload)]
     problems = _payload_problems(blueprint.payload)
+    built_for = blueprint.payload.get("scope", "workspace")
+    if scope not in SCOPES:
+        problems.append(f"scope {scope!r} must be one of {', '.join(SCOPES)}")
+    elif built_for != scope:
+        listed, where = ("content", "workspace") if scope == "workspace" else ("system_playbooks / playbooks", "system")
+        problems.append(f'a {built_for} Playbook can\'t be listed in {listed}; build it with scope="{where}"')
     front, body = _front_matter(blueprint.payload["skill_md"])
     name, description = front.get("name", ""), front.get("description", "")
     if not NAME_PATTERN.match(name) or len(name) > NAME_MAX:
@@ -232,15 +268,43 @@ def check_playbook(blueprint: ContentBlueprint, provider: Any = None) -> list[st
     for tool in tools:
         if tool and not _TOOL_NAME.match(tool):
             problems.append(f"allowed-tools '{tool}' doesn't look like a Marvin tool name (e.g. list_events)")
+    if built_for == "system":
+        for tool in tools:
+            if tool in _AI_WRITERS:
+                problems.append(f"allowed-tools '{tool}': a system Playbook writes drafts itself (create_draft / update_draft)")
+        texts = {SKILL_FILE: blueprint.payload["skill_md"], **files}
+        for rel, text in texts.items():
+            for token in sorted(set(_UUID.findall(text))):
+                problems.append(f"{rel} has the id '{token}'; name things by slug, ids differ in every workspace")
     return problems
+
+
+def playbook_warnings(blueprint: ContentBlueprint) -> list[str]:
+    """Soft problems with a Playbook (Marvin shows them, nothing is refused): ``allowed-tools`` set at all, and
+    ``compose_entry`` / ``revise_entry`` named in the body without saying not to use them."""
+    payload = blueprint.payload
+    if _shape_problem(payload):
+        return []
+    front, body = _front_matter(payload["skill_md"])
+    warnings: list[str] = []
+    if re.split(r"[\s,]+", front.get("allowed-tools", front.get("allowed_tools", "")).strip())[0]:
+        warnings.append("allowed-tools is set; it limits the agent's tools while this Playbook is loaded, so rarely needed")
+    for line in body.split("\n"):
+        if any(w in line for w in _AI_WRITERS) and not _NEGATION.search(line):
+            warnings.append(
+                f"the body points at compose_entry / revise_entry ('{line.strip()[:60]}'); write the text yourself with create_draft / update_draft"
+            )
+    return warnings
 
 
 __all__ = [
     "FILE_MAX_BYTES",
     "MAX_FILES",
+    "SCOPES",
     "SKILL_MAX_BYTES",
     "TOTAL_MAX_BYTES",
     "check_playbook",
     "provider_prefix",
     "playbook_blueprint",
+    "playbook_warnings",
 ]

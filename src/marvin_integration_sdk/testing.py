@@ -25,7 +25,7 @@ from .base import hands_off_problems
 from .playbooks import check_playbook
 from .recipes import MAX_GUIDE_BYTES, check_recipe, load_guide
 
-__all__ = ["IntegrationContract"]
+__all__ = ["IntegrationContract", "PluginPlaybooksContract"]
 
 
 class IntegrationContract:
@@ -62,6 +62,17 @@ class IntegrationContract:
         problems = {c.slug: check_playbook(c, provider) for c in provider.content if c.kind == "playbook"}
         assert not any(problems.values()), {slug: p for slug, p in problems.items() if p}
 
+    def test_system_playbooks_are_well_formed(self, provider):
+        """Every system Playbook is built with ``scope="system"``, passes the check and is not also in ``content``."""
+        shipped = [c for c in provider.system_playbooks]
+        assert all(c.kind == "playbook" for c in shipped), "system_playbooks holds Playbook blueprints only"
+        problems = {c.slug: check_playbook(c, provider, scope="system") for c in shipped}
+        assert not any(problems.values()), {slug: p for slug, p in problems.items() if p}
+        slugs = [c.slug for c in shipped]
+        assert len(slugs) == len(set(slugs)), f"duplicate system Playbook names: {slugs}"
+        both = set(slugs) & {c.slug for c in provider.content}
+        assert not both, f"in both content and system_playbooks: {sorted(both)}"
+
     def test_hands_off_is_well_formed(self, provider):
         problems = [p for a in provider.actions for p in hands_off_problems(a)]
         assert not problems, problems
@@ -72,3 +83,18 @@ class IntegrationContract:
         text = load_guide(provider)
         assert text is not None, f"guide {provider.guide!r} is missing, not .md, not UTF-8 or over {MAX_GUIDE_BYTES} bytes"
         assert text.lstrip().startswith("# "), "a guide starts with a '# Title' heading"
+
+
+class PluginPlaybooksContract:
+    """What a ``StoragePlugin`` or ``AIProviderPlugin`` (anything with ``slug`` and ``playbooks``) must satisfy about the
+    system Playbooks it ships. Override the ``plugin`` fixture."""
+
+    @pytest.fixture
+    def plugin(self):
+        raise NotImplementedError("override the `plugin` fixture to return the plugin object")
+
+    def test_system_playbooks_are_well_formed(self, plugin):
+        problems = {c.slug: check_playbook(c, plugin, scope="system") for c in plugin.playbooks}
+        assert not any(problems.values()), {slug: p for slug, p in problems.items() if p}
+        slugs = [c.slug for c in plugin.playbooks]
+        assert len(slugs) == len(set(slugs)), f"duplicate system Playbook names: {slugs}"

@@ -6,7 +6,10 @@ import textwrap
 
 import pytest
 
-from marvin_integration_sdk import ContentBlueprint, IntegrationProvider, check_playbook, playbook_blueprint
+from marvin_integration_sdk import ContentBlueprint, IntegrationProvider, check_playbook, playbook_blueprint, playbook_warnings
+from marvin_integration_sdk.ai import AIProvider, AIProviderPlugin
+from marvin_integration_sdk.storage import StoragePlugin
+from marvin_integration_sdk.testing import PluginPlaybooksContract
 from marvin_integration_sdk.playbooks import provider_prefix
 from marvin_integration_sdk.testing import IntegrationContract
 
@@ -169,3 +172,127 @@ def test_the_conformance_kit_checks_playbooks(package):
     bad = _provider(_bp(slug="other-name"))
     with pytest.raises(AssertionError, match="other-name"):
         Good().test_playbooks_are_well_formed(bad)
+
+
+# ── system Playbooks (0.16.0) ──────────────────────────────────────────────────────────────────────────────────────────
+
+
+def _system(skill=SKILL, **kw):
+    return ContentBlueprint(
+        kind="playbook",
+        slug="acme-weekly-report",
+        name="N",
+        payload={"skill_md": skill, "files": {"references/checklist.md": "x"}, "scope": "system", **kw},
+    )
+
+
+def test_scope_system_is_stamped_and_workspace_leaves_the_payload_alone(package):
+    pkg, _ = package
+    assert playbook_blueprint(pkg, "playbooks/acme-weekly-report", scope="system").payload["scope"] == "system"
+    assert "scope" not in playbook_blueprint(pkg, "playbooks/acme-weekly-report").payload
+    with pytest.raises(ValueError, match="scope"):
+        playbook_blueprint(pkg, "playbooks/acme-weekly-report", scope="global")
+
+
+def test_a_blueprint_must_be_listed_where_it_was_built_for(package):
+    pkg, _ = package
+    system = playbook_blueprint(pkg, "playbooks/acme-weekly-report", scope="system")
+    workspace = playbook_blueprint(pkg, "playbooks/acme-weekly-report")
+    assert check_playbook(system, _provider(), scope="system") == []
+    assert check_playbook(workspace, _provider()) == []
+    assert any("can't be listed in content" in p for p in check_playbook(system, _provider()))
+    assert any("can't be listed in system_playbooks" in p for p in check_playbook(workspace, _provider(), scope="system"))
+    assert any("scope 'x'" in p for p in check_playbook(workspace, _provider(), scope="x"))
+    assert any("payload scope" in p for p in check_playbook(_bp(scope="nope"), _provider()))
+
+
+def test_the_lint_refuses_ids_and_ai_writers_in_allowed_tools_for_system_playbooks_only():
+    with_id = SKILL + "\nThe image 3f2b8c1e-9d4a-4e6b-8a1f-0c2d3e4f5a6b is the logo.\n"
+    assert any("has the id '3f2b8c1e" in p for p in check_playbook(_system(with_id), _provider(), scope="system"))
+    assert check_playbook(_bp(skill_md=with_id), _provider()) == []
+    drafting = SKILL.replace("list_events get_entry", "get_entry compose_entry")
+    assert any("allowed-tools 'compose_entry'" in p for p in check_playbook(_system(drafting), _provider(), scope="system"))
+    assert not any("compose_entry" in p for p in check_playbook(_bp(skill_md=drafting), _provider()))
+    in_file = _system()
+    in_file.payload["files"]["references/checklist.md"] = "see 3f2b8c1e-9d4a-4e6b-8a1f-0c2d3e4f5a6b"
+    assert any("references/checklist.md has the id" in p for p in check_playbook(in_file, _provider(), scope="system"))
+
+
+def test_warnings_cover_allowed_tools_and_ai_writers_in_the_body():
+    assert any("allowed-tools is set" in w for w in playbook_warnings(_bp()))
+    quiet = SKILL.replace("allowed-tools: list_events get_entry\n", "")
+    assert playbook_warnings(_bp(skill_md=quiet)) == []
+    pointing = quiet + "\nSave it with compose_entry.\n"
+    assert any("compose_entry" in w for w in playbook_warnings(_bp(skill_md=pointing)))
+    refusing = quiet + "\nNever use revise_entry here; write the text yourself.\n"
+    assert playbook_warnings(_bp(skill_md=refusing)) == []
+    assert playbook_warnings(ContentBlueprint(kind="playbook", slug="a", name="A", payload={})) == []
+
+
+def test_providers_plugins_default_to_no_system_playbooks_and_info_lists_them(package):
+    pkg, _ = package
+    assert _provider().system_playbooks == ()
+    assert _provider().info()["system_playbooks"] == []
+
+    class Acme(IntegrationProvider):
+        slug = "acme"
+        name = "Acme"
+        system_playbooks = (playbook_blueprint(pkg, "playbooks/acme-weekly-report", scope="system"),)
+
+    assert [b["slug"] for b in Acme().info()["system_playbooks"]] == ["acme-weekly-report"]
+    json.dumps(Acme().info())
+
+
+def test_storage_and_ai_plugins_gain_a_playbooks_field_that_defaults_empty():
+    from marvin_integration_sdk.ai.fake import FakeAIProvider
+    from marvin_integration_sdk.storage.memory import MemoryStorageProvider
+
+    assert StoragePlugin(slug="mem", name="Mem", provider=MemoryStorageProvider).playbooks == ()
+    assert AIProviderPlugin(slug=FakeAIProvider.provider_type, name="Fake", provider=FakeAIProvider).playbooks == ()
+    assert issubclass(FakeAIProvider, AIProvider)
+
+
+def test_the_contract_checks_every_list(package):
+    pkg, _ = package
+    system = playbook_blueprint(pkg, "playbooks/acme-weekly-report", scope="system")
+    from marvin_integration_sdk.storage.memory import MemoryStorageProvider
+
+    class Acme(IntegrationProvider):
+        slug = "acme"
+        name = "Acme"
+        system_playbooks = (system,)
+
+    class Contract(IntegrationContract):
+        pass
+
+    Contract().test_system_playbooks_are_well_formed(Acme())
+    Contract().test_playbooks_are_well_formed(Acme())
+
+    class Both(Acme):
+        content = (playbook_blueprint(pkg, "playbooks/acme-weekly-report"),)
+
+    with pytest.raises(AssertionError, match="both content and system_playbooks"):
+        Contract().test_system_playbooks_are_well_formed(Both())
+
+    class Misplaced(Acme):
+        system_playbooks = (playbook_blueprint(pkg, "playbooks/acme-weekly-report"),)
+
+    with pytest.raises(AssertionError, match="listed in system_playbooks"):
+        Contract().test_system_playbooks_are_well_formed(Misplaced())
+
+    class Misnamed(Acme):
+        slug = "other"
+
+    with pytest.raises(AssertionError, match="must start with the provider's slug"):
+        Contract().test_system_playbooks_are_well_formed(Misnamed())
+
+    plugin = StoragePlugin(slug="acme", name="Acme storage", provider=MemoryStorageProvider, playbooks=(system,))
+    PluginPlaybooksContract().test_system_playbooks_are_well_formed(plugin)
+    bad = StoragePlugin(
+        slug="acme", name="Acme storage", provider=MemoryStorageProvider, playbooks=(playbook_blueprint(pkg, "playbooks/acme-weekly-report"),)
+    )
+    with pytest.raises(AssertionError, match="listed in system_playbooks"):
+        PluginPlaybooksContract().test_system_playbooks_are_well_formed(bad)
+    twice = StoragePlugin(slug="acme", name="Acme storage", provider=MemoryStorageProvider, playbooks=(system, system))
+    with pytest.raises(AssertionError, match="duplicate"):
+        PluginPlaybooksContract().test_system_playbooks_are_well_formed(twice)

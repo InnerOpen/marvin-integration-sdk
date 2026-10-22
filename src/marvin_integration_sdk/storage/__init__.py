@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, BinaryIO, ClassVar
 
+from ..base import ContentBlueprint
+
 __all__ = [
     "ENTRY_POINT_GROUP",
     "BackupTarget",
@@ -269,6 +271,9 @@ class StoragePlugin:
     provider: type[StorageProvider] | None = None
     target: type[BackupTarget] | None = None
     description: str = ""
+    playbooks: tuple[ContentBlueprint, ...] = ()
+    """System Playbooks this plugin gives every workspace (0.16.0), read-only and updated with the package: build each with
+    ``playbook_blueprint(__package__, "playbooks/<name>", scope="system")``; names start with the plugin's slug and a hyphen."""
 
     def __post_init__(self) -> None:
         if not _SLUG.match(self.slug or ""):

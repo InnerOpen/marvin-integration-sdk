@@ -243,6 +243,10 @@ class IntegrationProvider(ABC):
     actions: tuple[ProviderAction, ...] = ()
     content: tuple[ContentBlueprint, ...] = ()
     """Workspace content this integration needs. Offered for review on install, never auto-applied."""
+    system_playbooks: tuple[ContentBlueprint, ...] = ()
+    """Playbooks every workspace gets automatically (0.16.0), read-only, updated with this package: build each with
+    ``playbook_blueprint(__package__, "playbooks/<name>", scope="system")``. Kept apart from ``content`` so an older Marvin,
+    which reads only ``content``, never offers one as an Add item. See ``marvin_integration_sdk.playbooks``."""
     recipes: tuple[WorkflowRecipe, ...] = ()
     """Ready-made workflows for this integration, shown in Marvin's Workflow Library (tagged with this plugin) and
     offered once it is connected. Unlike a ``workflow`` blueprint nothing is created: the person fills one in and
@@ -320,6 +324,7 @@ class IntegrationProvider(ABC):
             "emits": [asdict(e) for e in self.emits],
             "actions": [{**asdict(a), "error_policy": {code: h.to_dict() for code, h in a.error_policy.items()}} for a in self.actions],
             "content": [asdict(c) for c in self.content],
+            "system_playbooks": [asdict(c) for c in self.system_playbooks],
             "recipes": [asdict(r) for r in self.recipes],
             "has_guide": load_guide(self) is not None,
             "signature_schemes": dict(self.signature_schemes),

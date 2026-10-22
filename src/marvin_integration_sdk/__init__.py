@@ -32,7 +32,7 @@ from .base import (
 from .errors import ErrorPolicy, Handle, IntegrationError, Retry, policy_info, resolve_policy
 from .http import HttpHelper, Response
 from .logo import LOGO_CONTENT_TYPES, load_logo
-from .playbooks import check_playbook, playbook_blueprint
+from .playbooks import check_playbook, playbook_blueprint, playbook_warnings
 from .recipes import MAX_GUIDE_BYTES, VARIABLE_TYPES, WorkflowRecipe, check_recipe, load_guide
 
 __all__ = [
@@ -75,6 +75,7 @@ __all__ = [
     "VARIABLE_TYPES",
     "playbook_blueprint",
     "check_playbook",
+    "playbook_warnings",
 ]
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"

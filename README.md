@@ -210,8 +210,41 @@ conformance test check them; Marvin checks again):
   `create_draft` / `update_draft`, not `compose_entry` / `revise_entry`.
 - An older Marvin skips a Playbook declaration with a warning and loads the rest of your content.
 
+**System Playbooks (0.16.0).** A Playbook can instead be offered in *every* workspace without anyone adding it: read-only,
+labelled "System · <your plugin>", updated with your release. A workspace can switch it off or copy it to customise; an operator
+can switch it off for the whole server. Use it for procedures nobody should have to install (reading a failed Check connection),
+not for suggestions. Build it with `scope="system"` and list it apart from `content` (an older Marvin reads only `content`, so it
+never offers one as an Add item):
+
+```python
+class AcmeProvider(IntegrationProvider):
+    system_playbooks = (playbook_blueprint(__package__, "playbooks/acme-read-a-failed-build", scope="system"),)
+
+PLUGIN = StoragePlugin(slug="bucket", name="Bucket storage", provider=BucketProvider,
+                       playbooks=(playbook_blueprint(__package__, "playbooks/bucket-setup", scope="system"),))
+```
+
+`StoragePlugin` and `AIProviderPlugin` take the same list as `playbooks` (default empty). `check_playbook(bp, provider, scope="system")`
+refuses a system Playbook in `content`, a workspace one in `system_playbooks` / `playbooks`, and (in the conformance tests) a name in
+both. Names start with the provider's or plugin's slug and a hyphen. Rules for a system Playbook; 7 and 8 are refused, 6 and 7's
+body half are warnings (`playbook_warnings`):
+
+1. A provider's `guide.md` stays the reference for building workflows. A skill covers doing a job and points to the guide
+   (`read_doc plugins/<provider>.md`); it never restates actions or recipes.
+2. The manual explains what a feature is. A skill is a procedure (steps, checks, what a good result looks like) and links the page.
+3. Workflow authoring stays with `workflow_authoring_guide` and the Builder: no "how to set up a workflow" skill (Marvin refuses
+   one longer than 20 lines that doesn't just call the guide and `draft_workflow`).
+4. Instructions say who, skills say how. A system skill never sets voice or tone ("if this workspace has a voice Playbook in your
+   list, load it") and never says who the agent is.
+5. Manual-only by default: no `disable-model-invocation` key means manual-only (people and workflows name it). Set it to `false`
+   only for a Playbook that helps in nearly any conversation.
+6. `allowed-tools` is rarely right. It is allowed (narrowing is a safety feature) but warned about, and the admin page shows it.
+7. Write it yourself: a skill that drafts text saves with `create_draft` / `update_draft`. `compose_entry` / `revise_entry` in
+   `allowed-tools` is refused; in the body it is warned about.
+8. Slugs only: a UUID-looking token is refused, since ids differ in every workspace.
+
 **Conformance kit.** Subclass `IntegrationContract` in your tests to check all of this (and that `info()`
-serialises, keys are unique and each Playbook is well formed) without Marvin:
+serialises, keys are unique and each Playbook, workspace or system, is well formed) without Marvin:
 
 ```python
 from marvin_integration_sdk.testing import IntegrationContract
@@ -221,6 +254,8 @@ class TestMyContract(IntegrationContract):
     def provider(self):
         return MyProvider()
 ```
+
+A storage or AI plugin that ships system Playbooks subclasses `PluginPlaybooksContract` (same module) with a `plugin` fixture.
 
 ## Hand-offs: follow the work you start (0.13.0)
 
