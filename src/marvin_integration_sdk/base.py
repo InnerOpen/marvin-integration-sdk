@@ -265,6 +265,15 @@ class IntegrationProvider(ABC):
     ``timestamp_header``, ``tolerance_seconds``, ``notes``. E.g. Square:
     ``{"square": {"encoding": "base64", "message": "{url}{body}", "header": "x-square-hmacsha256-signature"}}``."""
 
+    verification_schemes: dict[str, dict] = {}
+    """How this integration's senders check a webhook URL before they deliver, by name — offered to every incoming
+    webhook (Marvin's core has only ``custom``). The sender sends a GET carrying a challenge and the verify token it
+    was given; when the token matches the webhook's secret, Marvin echoes the challenge back. Each value names the
+    query parameters: ``challenge_param`` and ``token_param`` (both required), optionally ``mode_param`` with the
+    ``mode_values`` it must take, ``content_type`` (default ``text/plain``) and ``notes``. E.g. Meta (WebSub):
+    ``{"meta": {"challenge_param": "hub.challenge", "token_param": "hub.verify_token", "mode_param": "hub.mode",
+    "mode_values": ["subscribe"]}}``."""
+
     error_policy: ClassVar[ErrorPolicy] = {}
     """How the core handles an ``IntegrationError`` by its ``code`` — e.g.
     ``{"rate_limited": Handle(retry=Retry(backoff=(60, 300))), "*": Handle(review=True)}``. An action's
@@ -328,6 +337,7 @@ class IntegrationProvider(ABC):
             "recipes": [asdict(r) for r in self.recipes],
             "has_guide": load_guide(self) is not None,
             "signature_schemes": dict(self.signature_schemes),
+            "verification_schemes": dict(self.verification_schemes),
             "error_policy": policy_info(self),
         }
 
