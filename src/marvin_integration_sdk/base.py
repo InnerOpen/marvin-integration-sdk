@@ -30,6 +30,19 @@ CATEGORY_CAPABILITY = "capability"  # provides tools / AI capability
 CATEGORY_NOTIFY = "notify"  # sends notifications (Slack, Discord)
 CATEGORIES = (CATEGORY_SOURCE, CATEGORY_DESTINATION, CATEGORY_CAPABILITY, CATEGORY_NOTIFY)
 
+# The kinds of Social inbox item Marvin keeps (0.18.0). A `social.comments` read returns the first three; a provider's
+# `inbox_items_from_webhook` may return any of them. Marvin's own words, not a network's.
+INBOX_KINDS = (
+    "comment",  # on the account's post
+    "reply",  # in a comment thread
+    "mention",  # someone @-mentioned the account
+    "message",  # a direct message to the account: text, a shared post, a picture
+    "story_reply",  # someone replied to the account's story
+    "story_mention",  # someone mentioned the account in their story
+    "reaction",  # someone reacted to the account's message
+    "live_comment",  # on the account's live video
+)
+
 
 @dataclass(frozen=True)
 class CredentialField:
@@ -298,6 +311,18 @@ class IntegrationProvider(ABC):
     def on_webhook(self, payload: dict, ctx: IntegrationContext) -> PolledEvent | None:
         """For webhook-pushed sources: translate a raw payload into a bus event."""
         return None
+
+    def inbox_items_from_webhook(self, payload: dict, ctx: IntegrationContext) -> list[dict]:
+        """For social networks that push (0.18.0): a delivery to this integration's own incoming webhook (one its
+        ``content`` blueprint created), turned into Social inbox items. Marvin calls it after the delivery's signature is
+        verified and stores what it returns as the engagement poll's items are stored — deduplicated by ``id``, the
+        account's own items skipped — so return the same shape ``social.comments`` does: ``id`` (the network's id for the
+        item; the same one the poll gives, so it isn't stored twice), ``kind`` (one of ``INBOX_KINDS``), ``author``
+        ({id, handle, name}), ``text``, ``created_at`` (ISO 8601, UTC), and optionally ``post_id``, ``post_url``, ``url``,
+        ``network`` and ``attachments`` (a list of ``{type, url, title}``: a picture, a shared post and its caption).
+        Return [] for anything that isn't an inbox item (read receipts, the account's own messages). Never call the
+        network here: ``ctx`` carries the connection's config, not its secret. Default: nothing."""
+        return []
 
     def result_status(self, word: str, action: str | None = None) -> str | None:
         """Marvin's status (``in_flight``, ``succeeded`` or ``failed``) for a word this service uses for how a

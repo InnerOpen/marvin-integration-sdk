@@ -11,6 +11,7 @@ from .base import (
     CATEGORY_DESTINATION,
     CATEGORY_NOTIFY,
     CATEGORY_SOURCE,
+    INBOX_KINDS,
     INTEGRATION_REGISTRY,
     RESULT_FAILED,
     RESULT_IN_FLIGHT,
@@ -36,6 +37,7 @@ from .playbooks import check_playbook, playbook_blueprint, playbook_warnings
 from .recipes import MAX_GUIDE_BYTES, VARIABLE_TYPES, WorkflowRecipe, check_recipe, load_guide
 
 __all__ = [
+    "INBOX_KINDS",
     "CATEGORIES",
     "CATEGORY_SOURCE",
     "CATEGORY_DESTINATION",
@@ -78,4 +80,4 @@ __all__ = [
     "playbook_warnings",
 ]
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"
