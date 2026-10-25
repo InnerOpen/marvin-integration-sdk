@@ -77,6 +77,23 @@ Marvin validates the logo before serving it and falls back to `icon` when it ref
 `url(…)`/`@import` pointing anywhere but `#fragment`. Use a plain, self-contained mark — optimise it
 (e.g. with SVGO) and inline any gradients.
 
+## What a post may hold: `post_limits` (0.19.0)
+
+A provider that posts (a `social.post` action) states its network's numbers once, so Marvin can check a caption before it
+goes out — what the feed shows before "… more", a link where it won't work, too many hashtags — the same checks for every
+network, with each network's own limits:
+
+```python
+class InstagramProvider(IntegrationProvider):
+    post_limits = {"max": 2200, "unit": "characters", "visible": 125, "hashtags_max": 30, "links": "not_clickable"}
+```
+
+`max` is required; `unit` is `characters` (default) or `graphemes`; `visible` is how much shows before "… more" (leave it
+out when the whole post shows); `hashtags_max` only when the network has a limit; `links` is `clickable` (default),
+`not_clickable` or `card`. `post_limits_of(provider)` reads it with the defaults filled in, and `check_post_limits` says
+what's wrong with one. An unusable declaration is ignored, never an error. Marvin does the checking; the plugin only states
+the numbers.
+
 ## Options for an action input
 
 An input whose valid values come from the service (a channel, a list, a workflow) can say where to get

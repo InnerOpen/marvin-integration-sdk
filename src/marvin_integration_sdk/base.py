@@ -250,6 +250,10 @@ class IntegrationProvider(ABC):
     """Optional official logo: a path relative to this provider class's package (e.g. ``"logo.svg"``),
     shipped as package data. ``.svg`` or ``.png``. Read with ``load_logo``; Marvin validates it (size,
     no scripts or external references) and falls back to ``icon`` if it is refused."""
+    post_limits: ClassVar[dict] = {}
+    """What the network allows in a post (0.19.0), for a provider with a ``social.post`` action: ``max``, ``unit``
+    (characters|graphemes), ``visible`` (shown before "… more"), ``hashtags_max``, ``links`` (clickable|not_clickable|card).
+    Marvin checks a caption against it before posting. See ``marvin_integration_sdk.post_limits``."""
     config_schema: dict = {}  # JSON schema for `config`, validated on create/update
     credentials: tuple[CredentialField, ...] = ()
     emits: tuple[ProviderEvent, ...] = ()

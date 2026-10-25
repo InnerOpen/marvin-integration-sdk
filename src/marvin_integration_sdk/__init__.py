@@ -34,6 +34,7 @@ from .errors import ErrorPolicy, Handle, IntegrationError, Retry, policy_info, r
 from .http import HttpHelper, Response
 from .logo import LOGO_CONTENT_TYPES, load_logo
 from .playbooks import check_playbook, playbook_blueprint, playbook_warnings
+from .post_limits import LINK_BEHAVIOURS, UNITS, check_post_limits, post_limits_of
 from .recipes import MAX_GUIDE_BYTES, VARIABLE_TYPES, WorkflowRecipe, check_recipe, load_guide
 
 __all__ = [
@@ -78,6 +79,10 @@ __all__ = [
     "playbook_blueprint",
     "check_playbook",
     "playbook_warnings",
+    "post_limits_of",
+    "check_post_limits",
+    "UNITS",
+    "LINK_BEHAVIOURS",
 ]
 
-__version__ = "0.18.0"
+__version__ = "0.19.0"
